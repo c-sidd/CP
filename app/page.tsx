@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import Link from "next/link";
+
 
 // ---- config (edit freely) ----
 const CLUB_NAME = "TECHNOVATION";
@@ -77,6 +77,17 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const PS = "'Press Start 2P'";
 const VT = "'VT323'";
+
+// Simple deterministic hash for PIN storage (not crypto-grade, but sufficient for
+// client-side localStorage where the entire store is already readable).
+const hashPin = (pin: string): string => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < pin.length; i++) {
+    h ^= pin.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+};
 
 // ---- tactile 3D button (reproduces the design's press effect) ----
 function ArcadeButton({
@@ -176,6 +187,16 @@ export default function ArcadePage() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPin, setLoginPin] = useState("");
+
+  // Forgot PIN state
+  const [forgotPinMode, setForgotPinMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetPhone, setResetPhone] = useState("");
+  const [resetNewPin, setResetNewPin] = useState("");
+  const [resetConfirmPin, setResetConfirmPin] = useState("");
+  const [resetStep, setResetStep] = useState<"verify" | "newpin">("verify");
+  const [resetErr, setResetErr] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
   const [loginErr, setLoginErr] = useState("");
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -340,6 +361,66 @@ export default function ArcadePage() {
     setError("");
     setPage(p);
   };
+
+  // ---- Session persistence helpers ----
+  const loadCandidateByEmail = (email: string): boolean => {
+    try {
+      const raw = localStorage.getItem("tech_candidates_admin");
+      const list = raw ? JSON.parse(raw) : [];
+      const match = list.find((c: any) => c.email.toLowerCase() === email.toLowerCase());
+      if (!match) return false;
+
+      setForm({
+        name: match.name || "",
+        email: match.email || "",
+        branch: match.branch || "",
+        section: match.section || "",
+        phone: match.phone || "",
+        college: match.collegeId || "",
+        q1: match.answers?.q1 || "",
+        q2: match.answers?.q2 || "",
+        q3: match.answers?.q3 || "",
+        q4: match.answers?.q4 || "",
+        q5: match.answers?.q5 || "",
+        q6: match.answers?.q6 || "",
+        q7: match.answers?.q7 || "",
+      });
+      setSelectedClasses(match.domains || []);
+      setPlayerNo(match.playerNo || 1001);
+      setStageIdx(match.stageIdx || 1);
+      if (match.submissionLink) {
+        setTaskSubmitted(true);
+        setTaskInput(match.submissionLink);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const saveSession = (email: string) => {
+    try { sessionStorage.setItem("tech_session", email); } catch { /* ignore */ }
+  };
+
+  const clearSession = () => {
+    try { sessionStorage.removeItem("tech_session"); } catch { /* ignore */ }
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    goTo("floor");
+  };
+
+  // Auto-restore session on mount / refresh
+  useEffect(() => {
+    try {
+      const savedEmail = sessionStorage.getItem("tech_session");
+      if (savedEmail && loadCandidateByEmail(savedEmail)) {
+        setPage("hq");
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const setField = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const v = e.target.value;
     setForm((s) => ({ ...s, [k]: v }));
@@ -396,6 +477,7 @@ export default function ArcadePage() {
           q7: form.q7.trim(),
         },
         stageIdx: 1, // SCREENING
+        pinHash: "", // will be set in onEnterHQ
         updatedAt: "JUST NOW",
       };
 
@@ -420,12 +502,21 @@ export default function ArcadePage() {
       return;
     }
 
-    // Check live stage in real candidate store
+    // Save the hashed PIN to the candidate record
     try {
       const existingRaw = localStorage.getItem("tech_candidates_admin");
       if (existingRaw) {
         const list = JSON.parse(existingRaw);
-        const match = list.find((c: any) => c.email.toLowerCase() === form.email.trim().toLowerCase());
+        const updated = list.map((c: any) => {
+          if (c.email.toLowerCase() === form.email.trim().toLowerCase()) {
+            return { ...c, pinHash: hashPin(pin) };
+          }
+          return c;
+        });
+        localStorage.setItem("tech_candidates_admin", JSON.stringify(updated));
+
+        // Also sync stage
+        const match = updated.find((c: any) => c.email.toLowerCase() === form.email.trim().toLowerCase());
         if (match) {
           setStageIdx(match.stageIdx || 1);
           if (match.submissionLink) {
@@ -438,6 +529,7 @@ export default function ArcadePage() {
       /* fallback */
     }
 
+    saveSession(form.email.trim());
     goTo("hq");
   };
 
@@ -482,40 +574,102 @@ export default function ArcadePage() {
       const match = list.find((c: any) => c.email.toLowerCase() === loginEmail.trim().toLowerCase());
 
       if (!match) {
-        setLoginErr("NO APPLICANT FILE FOUND FOR THAT EMAIL. PLEASE REGISTER FIRST.");
+        setLoginErr("NO APPLICANT FILE FOUND FOR THAT EMAIL. REGISTER FIRST.");
         return;
       }
 
-      setForm({
-        name: match.name || "",
-        email: match.email || "",
-        branch: match.branch || "",
-        section: match.section || "",
-        phone: match.phone || "",
-        college: match.collegeId || "",
-        q1: match.answers?.q1 || "",
-        q2: match.answers?.q2 || "",
-        q3: match.answers?.q3 || "",
-        q4: match.answers?.q4 || "",
-        q5: match.answers?.q5 || "",
-        q6: match.answers?.q6 || "",
-        q7: match.answers?.q7 || "",
-      });
-      setSelectedClasses(match.domains || []);
-      setPlayerNo(match.playerNo || 1001);
-      setStageIdx(match.stageIdx || 1);
-      setPin(loginPin);
-
-      if (match.submissionLink) {
-        setTaskSubmitted(true);
-        setTaskInput(match.submissionLink);
+      // Verify PIN against stored hash
+      if (!match.pinHash) {
+        setLoginErr("ACCOUNT NOT ACTIVATED. COMPLETE REGISTRATION FIRST.");
+        return;
       }
+      if (hashPin(loginPin) !== match.pinHash) {
+        setLoginErr("INCORRECT PIN. TRY AGAIN OR USE FORGOT PIN.");
+        return;
+      }
+
+      // PIN verified — load candidate data
+      loadCandidateByEmail(loginEmail.trim());
+      setPin(loginPin);
 
       setShowLoginModal(false);
       setLoginErr("");
+      saveSession(loginEmail.trim());
       goTo("hq");
     } catch {
       setLoginErr("SYSTEM ERROR ACCESSING PLAYER FILE");
+    }
+  };
+
+  const handleForgotPinVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail.trim() || !resetPhone.trim()) {
+      setResetErr("ENTER BOTH EMAIL & PHONE TO VERIFY IDENTITY");
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("tech_candidates_admin");
+      const list = raw ? JSON.parse(raw) : [];
+      const match = list.find((c: any) => c.email.toLowerCase() === resetEmail.trim().toLowerCase());
+
+      if (!match) {
+        setResetErr("NO APPLICANT FILE FOUND FOR THAT EMAIL.");
+        return;
+      }
+
+      // Verify phone number matches (last 4 digits for security)
+      const storedPhone = (match.phone || "").replace(/\D/g, "");
+      const inputPhone = resetPhone.replace(/\D/g, "");
+      if (storedPhone.length < 4 || inputPhone.length < 4 || storedPhone.slice(-4) !== inputPhone.slice(-4)) {
+        setResetErr("PHONE VERIFICATION FAILED. LAST 4 DIGITS DON'T MATCH.");
+        return;
+      }
+
+      // Identity verified — proceed to new PIN step
+      setResetErr("");
+      setResetStep("newpin");
+    } catch {
+      setResetErr("SYSTEM ERROR");
+    }
+  };
+
+  const handleResetPinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (resetNewPin.length < 4) {
+      setResetErr("NEW PIN MUST BE 4-6 DIGITS");
+      return;
+    }
+    if (resetNewPin !== resetConfirmPin) {
+      setResetErr("PINs DO NOT MATCH. RE-ENTER.");
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("tech_candidates_admin");
+      const list = raw ? JSON.parse(raw) : [];
+      const updated = list.map((c: any) => {
+        if (c.email.toLowerCase() === resetEmail.trim().toLowerCase()) {
+          return { ...c, pinHash: hashPin(resetNewPin) };
+        }
+        return c;
+      });
+      localStorage.setItem("tech_candidates_admin", JSON.stringify(updated));
+
+      setResetErr("");
+      setResetSuccess("PIN RESET SUCCESSFUL! YOU CAN NOW LOG IN.");
+      setTimeout(() => {
+        setForgotPinMode(false);
+        setResetStep("verify");
+        setResetEmail("");
+        setResetPhone("");
+        setResetNewPin("");
+        setResetConfirmPin("");
+        setResetSuccess("");
+        setResetErr("");
+      }, 2500);
+    } catch {
+      setResetErr("SYSTEM ERROR RESETTING PIN");
     }
   };
   const onDownload = () => {
@@ -1280,7 +1434,7 @@ export default function ArcadePage() {
 
           <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginTop: "clamp(24px,3.5vw,36px)", flexWrap: "wrap" }}>
             <ArcadeButton onClick={() => goTo("pass")} style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#00f0ff", background: "transparent", border: "2px solid #1c3a4a", borderRadius: "5px", padding: "11px 15px" }} activeStyle={{ transform: "translateY(2px)" }}>◄ VIEW MY PASS</ArcadeButton>
-            <ArcadeButton onClick={() => goTo("floor")} style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#7de8ff", background: "transparent", border: "2px solid #1c3a4a", borderRadius: "5px", padding: "11px 15px" }} activeStyle={{ transform: "translateY(2px)" }}>↺ ARCADE FLOOR</ArcadeButton>
+            <ArcadeButton onClick={handleLogout} style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#ff3b30", background: "transparent", border: "2px solid #5a1a1a", borderRadius: "5px", padding: "11px 15px" }} activeStyle={{ transform: "translateY(2px)" }}>⏻ LOG OUT</ArcadeButton>
           </div>
         </div>
       </div>
@@ -1522,9 +1676,23 @@ export default function ArcadePage() {
 
   const renderLoginModal = () => {
     if (!showLoginModal) return null;
+
+    const closeModal = () => {
+      setShowLoginModal(false);
+      setForgotPinMode(false);
+      setResetStep("verify");
+      setResetEmail("");
+      setResetPhone("");
+      setResetNewPin("");
+      setResetConfirmPin("");
+      setResetErr("");
+      setResetSuccess("");
+      setLoginErr("");
+    };
+
     return (
       <div
-        onClick={() => setShowLoginModal(false)}
+        onClick={closeModal}
         style={{
           position: "fixed",
           inset: 0,
@@ -1543,70 +1711,160 @@ export default function ArcadePage() {
             width: "100%",
             maxWidth: "460px",
             background: "radial-gradient(120% 100% at 50% 0%, #12192e 0%, #070914 100%)",
-            border: "3px solid #39ff14",
+            border: `3px solid ${forgotPinMode ? "#ffe600" : "#39ff14"}`,
             borderRadius: "16px",
             padding: "32px 24px",
-            boxShadow: "0 0 50px rgba(57,255,20,.25)",
+            boxShadow: `0 0 50px ${forgotPinMode ? "rgba(255,230,0,.25)" : "rgba(57,255,20,.25)"}`,
             position: "relative",
             textAlign: "center",
           }}
         >
           <button
-            onClick={() => setShowLoginModal(false)}
+            onClick={closeModal}
             style={{ position: "absolute", top: "14px", right: "16px", cursor: "pointer", background: "transparent", border: "2px solid #ff3b30", color: "#ff3b30", borderRadius: "6px", padding: "4px 8px", fontFamily: PS, fontSize: "8px" }}
           >
             ✕ CLOSE
           </button>
 
-          <div style={{ fontFamily: PS, fontSize: "18px", color: "#39ff14", textShadow: "0 0 12px #39ff14" }}>🔑 PLAYER LOGIN</div>
-          <div style={{ fontFamily: VT, fontSize: "18px", color: "#7de8ff", marginTop: "8px" }}>Enter your registered email & PIN to open Player HQ</div>
+          {!forgotPinMode ? (
+            /* ========== LOGIN VIEW ========== */
+            <>
+              <div style={{ fontFamily: PS, fontSize: "18px", color: "#39ff14", textShadow: "0 0 12px #39ff14" }}>🔑 PLAYER LOGIN</div>
+              <div style={{ fontFamily: VT, fontSize: "18px", color: "#7de8ff", marginTop: "8px" }}>Enter your registered email & PIN to open Player HQ</div>
 
-          <form onSubmit={handleCandidateLogin} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
-            <div>
-              <div style={{ ...labelSm, color: "#39ff14" }}>REGISTERED EMAIL</div>
-              <input
-                type="email"
-                value={loginEmail}
-                onChange={(e) => { setLoginEmail(e.target.value); setLoginErr(""); }}
-                placeholder="name@college.edu"
-                style={fieldStyle}
-              />
-            </div>
+              <form onSubmit={handleCandidateLogin} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
+                <div>
+                  <div style={{ ...labelSm, color: "#39ff14" }}>REGISTERED EMAIL</div>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => { setLoginEmail(e.target.value); setLoginErr(""); }}
+                    placeholder="name@college.edu"
+                    style={fieldStyle}
+                  />
+                </div>
 
-            <div>
-              <div style={{ ...labelSm, color: "#ffe600" }}>SECRET PIN (4-6 DIGITS)</div>
-              <input
-                type="password"
-                value={loginPin}
-                onChange={(e) => { setLoginPin(e.target.value.replace(/[^0-9]/g, "")); setLoginErr(""); }}
-                maxLength={6}
-                placeholder="ENTER PIN"
-                style={fieldStyle}
-              />
-            </div>
+                <div>
+                  <div style={{ ...labelSm, color: "#ffe600" }}>SECRET PIN (4-6 DIGITS)</div>
+                  <input
+                    type="password"
+                    value={loginPin}
+                    onChange={(e) => { setLoginPin(e.target.value.replace(/[^0-9]/g, "")); setLoginErr(""); }}
+                    maxLength={6}
+                    placeholder="ENTER PIN"
+                    style={fieldStyle}
+                  />
+                </div>
 
-            {loginErr && (
-              <div style={{ ...errBase, textAlign: "center", fontSize: "8px" }}>{loginErr}</div>
-            )}
+                {loginErr && (
+                  <div style={{ ...errBase, textAlign: "center", fontSize: "8px" }}>{loginErr}</div>
+                )}
 
-            <button
-              type="submit"
-              style={{
-                cursor: "pointer",
-                fontFamily: PS,
-                fontSize: "10px",
-                color: "#04040a",
-                background: "radial-gradient(circle at 40% 30%, #eaffb0, #39ff14 55%, #0f8a00)",
-                border: "none",
-                borderRadius: "8px",
-                padding: "14px",
-                boxShadow: "0 6px 0 #0a5200, 0 0 20px rgba(57,255,20,.5)",
-                marginTop: "6px",
-              }}
-            >
-              ENTER PLAYER HQ ▶
-            </button>
-          </form>
+                <button
+                  type="submit"
+                  style={{
+                    cursor: "pointer",
+                    fontFamily: PS,
+                    fontSize: "10px",
+                    color: "#04040a",
+                    background: "radial-gradient(circle at 40% 30%, #eaffb0, #39ff14 55%, #0f8a00)",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "14px",
+                    boxShadow: "0 6px 0 #0a5200, 0 0 20px rgba(57,255,20,.5)",
+                    marginTop: "6px",
+                  }}
+                >
+                  ENTER PLAYER HQ ▶
+                </button>
+              </form>
+
+              <button
+                onClick={() => { setForgotPinMode(true); setLoginErr(""); }}
+                style={{ cursor: "pointer", fontFamily: PS, fontSize: "7px", color: "#ffe600", background: "transparent", border: "none", marginTop: "18px", textShadow: "0 0 6px #ffe600", textDecoration: "underline", textUnderlineOffset: "4px" }}
+              >
+                FORGOT PIN? RESET HERE ▶
+              </button>
+            </>
+          ) : (
+            /* ========== FORGOT PIN VIEW ========== */
+            <>
+              <div style={{ fontFamily: PS, fontSize: "16px", color: "#ffe600", textShadow: "0 0 12px #ffe600" }}>🔐 RESET PIN</div>
+              <div style={{ fontFamily: VT, fontSize: "18px", color: "#7de8ff", marginTop: "8px" }}>
+                {resetStep === "verify" ? "Verify your identity using email & registered phone" : "Set your new secret PIN"}
+              </div>
+
+              {resetSuccess ? (
+                <div style={{ fontFamily: PS, fontSize: "10px", color: "#39ff14", textShadow: "0 0 10px #39ff14", marginTop: "24px", padding: "16px", border: "2px solid #39ff14", borderRadius: "8px", background: "rgba(57,255,20,.08)" }}>
+                  ✓ {resetSuccess}
+                </div>
+              ) : resetStep === "verify" ? (
+                <form onSubmit={handleForgotPinVerify} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
+                  <div>
+                    <div style={{ ...labelSm, color: "#ffe600" }}>REGISTERED EMAIL</div>
+                    <input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(e) => { setResetEmail(e.target.value); setResetErr(""); }}
+                      placeholder="name@college.edu"
+                      style={fieldStyle}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ ...labelSm, color: "#ff7a2b" }}>REGISTERED PHONE (LAST 4 DIGITS)</div>
+                    <input
+                      type="text"
+                      value={resetPhone}
+                      onChange={(e) => { setResetPhone(e.target.value.replace(/[^0-9]/g, "").slice(0, 4)); setResetErr(""); }}
+                      maxLength={4}
+                      placeholder="LAST 4 DIGITS"
+                      style={fieldStyle}
+                    />
+                  </div>
+                  {resetErr && <div style={{ ...errBase, textAlign: "center", fontSize: "8px" }}>{resetErr}</div>}
+                  <button type="submit" style={{ cursor: "pointer", fontFamily: PS, fontSize: "10px", color: "#04040a", background: "radial-gradient(circle at 40% 30%, #fff5b0, #ffe600 55%, #b8a200)", border: "none", borderRadius: "8px", padding: "14px", boxShadow: "0 6px 0 #8a7900, 0 0 20px rgba(255,230,0,.4)", marginTop: "6px" }}>
+                    VERIFY IDENTITY ▶
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleResetPinSubmit} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
+                  <div>
+                    <div style={{ ...labelSm, color: "#39ff14" }}>NEW PIN (4-6 DIGITS)</div>
+                    <input
+                      type="password"
+                      value={resetNewPin}
+                      onChange={(e) => { setResetNewPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6)); setResetErr(""); }}
+                      maxLength={6}
+                      placeholder="NEW PIN"
+                      style={fieldStyle}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ ...labelSm, color: "#00f0ff" }}>CONFIRM NEW PIN</div>
+                    <input
+                      type="password"
+                      value={resetConfirmPin}
+                      onChange={(e) => { setResetConfirmPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6)); setResetErr(""); }}
+                      maxLength={6}
+                      placeholder="RE-ENTER PIN"
+                      style={fieldStyle}
+                    />
+                  </div>
+                  {resetErr && <div style={{ ...errBase, textAlign: "center", fontSize: "8px" }}>{resetErr}</div>}
+                  <button type="submit" style={{ cursor: "pointer", fontFamily: PS, fontSize: "10px", color: "#04040a", background: "radial-gradient(circle at 40% 30%, #eaffb0, #39ff14 55%, #0f8a00)", border: "none", borderRadius: "8px", padding: "14px", boxShadow: "0 6px 0 #0a5200, 0 0 20px rgba(57,255,20,.5)", marginTop: "6px" }}>
+                    SET NEW PIN ▶
+                  </button>
+                </form>
+              )}
+
+              <button
+                onClick={() => { setForgotPinMode(false); setResetStep("verify"); setResetErr(""); setResetSuccess(""); }}
+                style={{ cursor: "pointer", fontFamily: PS, fontSize: "7px", color: "#7de8ff", background: "transparent", border: "none", marginTop: "18px", textDecoration: "underline", textUnderlineOffset: "4px" }}
+              >
+                ◄ BACK TO LOGIN
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
