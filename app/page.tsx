@@ -474,7 +474,7 @@ export default function ArcadePage() {
 
   // ---- cabinet / badge styles ----
   const cabStyle = (d: (typeof DOMAINS)[number]): CSSProperties => {
-    const active = selectedClass === d.key || hover === d.key;
+    const active = hover === d.key;
     return {
       position: "relative",
       cursor: "pointer",
@@ -489,9 +489,9 @@ export default function ArcadePage() {
       overflow: "hidden",
       minWidth: 0,
       background: active ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)",
-      border: "2px solid " + (selectedClass === d.key ? d.color : "rgba(125,232,255,.18)"),
+      border: "2px solid " + (active ? d.color : "rgba(125,232,255,.18)"),
       boxShadow: active ? "0 0 20px " + d.color + "55, inset 0 0 16px rgba(255,255,255,.06)" : "none",
-      transform: selectedClass === d.key ? "translateY(-3px)" : "none",
+      transform: active ? "translateY(-3px)" : "none",
       transition: "all .12s",
     };
   };
@@ -723,11 +723,11 @@ export default function ArcadePage() {
                 {/* DOMAIN GRID */}
                 <div style={termStyle}>
                   <div style={{ fontFamily: PS, fontSize: "clamp(9px,1.3vw,14px)", color: "#ffe600", textShadow: "0 0 8px #ffe600", letterSpacing: "1px", marginBottom: "2.5%" }}>
-                    ▶ SELECT A DOMAIN — 6 GUILD STAGES
+                    ▶ EXPLORE OUR DOMAINS — 6 GUILD STAGES
                   </div>
                   <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gridTemplateRows: "repeat(2,1fr)", gap: "2.4%" }}>
                     {DOMAINS.map((d) => (
-                      <div key={d.key} style={cabStyle(d)} onClick={() => { setSelectedClass(d.key); setError(""); openDetail(d.key); }} onMouseEnter={() => setHover(d.key)} onMouseLeave={() => setHover("")}>
+                      <div key={d.key} style={cabStyle(d)} onClick={() => openDetail(d.key)} onMouseEnter={() => setHover(d.key)} onMouseLeave={() => setHover("")}>
                         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: d.color, boxShadow: "0 0 10px " + d.color }} />
                         <div style={{ fontFamily: PS, fontSize: "clamp(16px,2.2vw,30px)", color: d.color, textShadow: "0 0 12px " + d.color }}>{d.glyph}</div>
                         <div style={{ fontFamily: PS, fontSize: "clamp(8px,1vw,11px)", color: "#fff", marginTop: "7px", letterSpacing: "1px" }}>{d.name}</div>
@@ -1244,29 +1244,31 @@ export default function ArcadePage() {
 
             {/* CTA */}
             <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-              <ArcadeButton
-                onClick={() => {
-                  setSelectedClass(d.key);
-                  setError("");
-                  closeDetail();
-                }}
-                style={{
-                  cursor: "pointer",
-                  fontFamily: PS,
-                  fontSize: "clamp(9px,1.1vw,12px)",
-                  color: "#04040a",
-                  background: `radial-gradient(circle at 40% 30%, ${d.color}dd, ${d.color} 55%, ${d.color}aa)`,
-                  border: "none",
-                  borderRadius: "8px",
-                  padding: "clamp(12px,1.8vw,18px) clamp(20px,3vw,32px)",
-                  boxShadow: `0 6px 0 ${d.color}55, 0 0 28px ${d.color}66`,
-                  textShadow: "0 1px 0 rgba(255,255,255,.4)",
-                  letterSpacing: "1px",
-                }}
-                activeStyle={{ transform: "translateY(4px)", boxShadow: `0 2px 0 ${d.color}55, 0 0 14px ${d.color}44` }}
-              >
-                ▶ SELECT {d.cls} CLASS
-              </ArcadeButton>
+              {page !== "floor" && (
+                <ArcadeButton
+                  onClick={() => {
+                    setSelectedClass(d.key);
+                    setError("");
+                    closeDetail();
+                  }}
+                  style={{
+                    cursor: "pointer",
+                    fontFamily: PS,
+                    fontSize: "clamp(9px,1.1vw,12px)",
+                    color: "#04040a",
+                    background: `radial-gradient(circle at 40% 30%, ${d.color}dd, ${d.color} 55%, ${d.color}aa)`,
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "clamp(12px,1.8vw,18px) clamp(20px,3vw,32px)",
+                    boxShadow: `0 6px 0 ${d.color}55, 0 0 28px ${d.color}66`,
+                    textShadow: "0 1px 0 rgba(255,255,255,.4)",
+                    letterSpacing: "1px",
+                  }}
+                  activeStyle={{ transform: "translateY(4px)", boxShadow: `0 2px 0 ${d.color}55, 0 0 14px ${d.color}44` }}
+                >
+                  ▶ SELECT {d.cls} CLASS
+                </ArcadeButton>
+              )}
               <ArcadeButton
                 onClick={closeDetail}
                 style={{
