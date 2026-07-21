@@ -225,9 +225,13 @@ export default function CharacterCreation() {
 
           {/* Scenario fields */}
           <div className="mt-8 flex flex-col gap-5">
-            {SCENARIOS.map((s) => (
-              <label
+            {SCENARIOS.map((s, i) => (
+              <motion.label
                 key={s.key}
+                initial={{ opacity: 0, x: -12 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.08 * i, duration: 0.35 }}
                 className="font-pixel text-[9px] text-arcade-purple"
               >
                 <span className="text-arcade-yellow">[{s.label}]</span>{" "}
@@ -241,7 +245,7 @@ export default function CharacterCreation() {
                   rows={3}
                   className={inputCls + " resize-none"}
                 />
-              </label>
+              </motion.label>
             ))}
           </div>
 
