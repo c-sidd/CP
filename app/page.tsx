@@ -172,6 +172,12 @@ export default function ArcadePage() {
     { id: "c2", icon: "◉", color: "#00f0ff", title: "SCREENING IN PROGRESS", body: "The guild council is reviewing your player file. ETA 48 hrs.", time: "5 MIN AGO" },
   ]);
 
+  // Returning Candidate Login state
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPin, setLoginPin] = useState("");
+  const [loginErr, setLoginErr] = useState("");
+
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const ticketRef = useRef<HTMLCanvasElement | null>(null);
   const hqAvatarRef = useRef<HTMLCanvasElement | null>(null);
@@ -363,28 +369,126 @@ export default function ArcadePage() {
       setError("!! ANSWER ALL 7 QUEST QUESTIONS TO PROCEED");
       return;
     }
-    setScore((s) => {
-      setPlayerNo(s + 1);
-      return s + 1;
-    });
+
+    // Save to real candidate store (tech_candidates_admin)
+    try {
+      const existingRaw = localStorage.getItem("tech_candidates_admin");
+      const list = existingRaw ? JSON.parse(existingRaw) : [];
+      const newPlayerNo = 1000 + list.length + 1;
+      
+      const newCand = {
+        id: `cand-${Date.now()}`,
+        playerNo: newPlayerNo,
+        name: form.name.trim(),
+        email: form.email.trim(),
+        branch: form.branch.trim(),
+        section: form.section.trim(),
+        phone: form.phone.trim(),
+        collegeId: form.college.trim(),
+        domains: selectedClasses,
+        answers: {
+          q1: form.q1.trim(),
+          q2: form.q2.trim(),
+          q3: form.q3.trim(),
+          q4: form.q4.trim(),
+          q5: form.q5.trim(),
+          q6: form.q6.trim(),
+          q7: form.q7.trim(),
+        },
+        stageIdx: 1, // SCREENING
+        updatedAt: "JUST NOW",
+      };
+
+      // Filter out duplicate email if existing
+      const filtered = list.filter((c: any) => c.email.toLowerCase() !== newCand.email.toLowerCase());
+      filtered.unshift(newCand);
+      localStorage.setItem("tech_candidates_admin", JSON.stringify(filtered));
+
+      setPlayerNo(newPlayerNo);
+      setScore(1337 + filtered.length);
+    } catch {
+      setPlayerNo(1001);
+    }
+
     setError("");
     setPage("pass");
   };
+
   const onEnterHQ = () => {
     if (pin.length < 4) {
       setError("PIN MUST BE 4-6 DIGITS");
       return;
     }
+
+    // Check live stage in real candidate store
+    try {
+      const existingRaw = localStorage.getItem("tech_candidates_admin");
+      if (existingRaw) {
+        const list = JSON.parse(existingRaw);
+        const match = list.find((c: any) => c.email.toLowerCase() === form.email.trim().toLowerCase());
+        if (match) {
+          setStageIdx(match.stageIdx || 1);
+          if (match.submissionLink) {
+            setTaskSubmitted(true);
+            setTaskInput(match.submissionLink);
+          }
+        }
+      }
+    } catch {
+      /* fallback */
+    }
+
     goTo("hq");
   };
-  const onSubmitTask = () => {
-    if (!taskInput.trim()) return;
-    setTaskSubmitted(true);
-    setStageIdx((s) => Math.max(s, 2));
-    setComms((cs) => [
-      { id: "c" + Date.now(), icon: "⚔", color: "#39ff14", title: "TASK SUBMITTED", body: "Round 1 quest received. The council will judge your work soon. +50 XP", time: "JUST NOW" },
-      ...cs,
-    ]);
+
+  const handleCandidateLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim() || !loginPin.trim()) {
+      setLoginErr("ENTER BOTH REGISTERED EMAIL & PIN");
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("tech_candidates_admin");
+      const list = raw ? JSON.parse(raw) : [];
+      const match = list.find((c: any) => c.email.toLowerCase() === loginEmail.trim().toLowerCase());
+
+      if (!match) {
+        setLoginErr("NO APPLICANT FILE FOUND FOR THAT EMAIL. PLEASE REGISTER FIRST.");
+        return;
+      }
+
+      setForm({
+        name: match.name || "",
+        email: match.email || "",
+        branch: match.branch || "",
+        section: match.section || "",
+        phone: match.phone || "",
+        college: match.collegeId || "",
+        q1: match.answers?.q1 || "",
+        q2: match.answers?.q2 || "",
+        q3: match.answers?.q3 || "",
+        q4: match.answers?.q4 || "",
+        q5: match.answers?.q5 || "",
+        q6: match.answers?.q6 || "",
+        q7: match.answers?.q7 || "",
+      });
+      setSelectedClasses(match.domains || []);
+      setPlayerNo(match.playerNo || 1001);
+      setStageIdx(match.stageIdx || 1);
+      setPin(loginPin);
+
+      if (match.submissionLink) {
+        setTaskSubmitted(true);
+        setTaskInput(match.submissionLink);
+      }
+
+      setShowLoginModal(false);
+      setLoginErr("");
+      goTo("hq");
+    } catch {
+      setLoginErr("SYSTEM ERROR ACCESSING PLAYER FILE");
+    }
   };
   const onDownload = () => {
     const c = ticketRef.current;
@@ -704,11 +808,14 @@ export default function ArcadePage() {
               <span style={{ fontFamily: PS, fontSize: "11px", color: "#00f0ff", textShadow: "0 0 8px #00f0ff" }}>►</span>
             </div>
 
-            {/* high score & admin portal */}
-            <div style={{ position: "absolute", top: "8.2%", left: "2.5%", zIndex: 7, textAlign: "left" }}>
-              <Link href="/admin" style={{ fontFamily: PS, fontSize: "9px", color: "#ff2bd1", border: "1.5px solid #ff2bd166", background: "rgba(255,43,209,.1)", borderRadius: "4px", padding: "6px 10px", display: "inline-block", textShadow: "0 0 8px #ff2bd1" }}>
-                🛡 ADMIN PORTAL
-              </Link>
+            {/* candidate login */}
+            <div style={{ position: "absolute", top: "8.2%", left: "2.5%", zIndex: 7, textAlign: "left", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => setShowLoginModal(true)}
+                style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#39ff14", border: "1.5px solid #39ff1466", background: "rgba(57,255,20,.1)", borderRadius: "4px", padding: "6px 10px", textShadow: "0 0 8px #39ff14" }}
+              >
+                🔑 PLAYER LOGIN
+              </button>
             </div>
 
             <div style={{ position: "absolute", top: "8.2%", right: "2.5%", zIndex: 7, textAlign: "right", fontFamily: PS, lineHeight: 1.7 }}>
@@ -817,7 +924,7 @@ export default function ArcadePage() {
                     <input value={form.email} onChange={setField("email")} placeholder="EMAIL" style={hookInput} />
                   </div>
                   <div style={{ ...errBase, fontSize: "8px", minHeight: "8px", textAlign: "center" }}>{error}</div>
-                  <div style={{ display: "flex", gap: "10px", marginTop: "2px" }}>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "2px", flexWrap: "wrap", justifyContent: "center" }}>
                     <ArcadeButton
                       onClick={onScrollDomains}
                       style={{ cursor: "pointer", width: "clamp(48px,5.5vw,66px)", height: "clamp(48px,5.5vw,66px)", borderRadius: "50%", border: "none", background: "radial-gradient(circle at 38% 30%, #7de8ff, #0090b8 55%, #003a4d)", boxShadow: "0 8px 0 #002230, 0 0 18px rgba(0,240,255,.6), inset 0 3px 6px rgba(255,255,255,.5)", fontFamily: PS, fontSize: "clamp(7px, 0.9vw, 9px)", color: "#04121a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1.15 }}
@@ -825,6 +932,12 @@ export default function ArcadePage() {
                     >
                       A<br />INFO
                     </ArcadeButton>
+                    <button
+                      onClick={() => setShowLoginModal(true)}
+                      style={{ cursor: "pointer", fontFamily: PS, fontSize: "8px", color: "#ffe600", background: "rgba(255,230,0,.1)", border: "1px solid #ffe60066", borderRadius: "4px", padding: "6px 10px", textShadow: "0 0 6px #ffe600" }}
+                    >
+                      RETURNING PLAYER LOGIN ▶
+                    </button>
                   </div>
                 </div>
 
@@ -1379,6 +1492,98 @@ export default function ArcadePage() {
     );
   };
 
+  const renderLoginModal = () => {
+    if (!showLoginModal) return null;
+    return (
+      <div
+        onClick={() => setShowLoginModal(false)}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 110,
+          background: "rgba(4,4,10,0.92)",
+          backdropFilter: "blur(10px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "100%",
+            maxWidth: "460px",
+            background: "radial-gradient(120% 100% at 50% 0%, #12192e 0%, #070914 100%)",
+            border: "3px solid #39ff14",
+            borderRadius: "16px",
+            padding: "32px 24px",
+            boxShadow: "0 0 50px rgba(57,255,20,.25)",
+            position: "relative",
+            textAlign: "center",
+          }}
+        >
+          <button
+            onClick={() => setShowLoginModal(false)}
+            style={{ position: "absolute", top: "14px", right: "16px", cursor: "pointer", background: "transparent", border: "2px solid #ff3b30", color: "#ff3b30", borderRadius: "6px", padding: "4px 8px", fontFamily: PS, fontSize: "8px" }}
+          >
+            ✕ CLOSE
+          </button>
+
+          <div style={{ fontFamily: PS, fontSize: "18px", color: "#39ff14", textShadow: "0 0 12px #39ff14" }}>🔑 PLAYER LOGIN</div>
+          <div style={{ fontFamily: VT, fontSize: "18px", color: "#7de8ff", marginTop: "8px" }}>Enter your registered email & PIN to open Player HQ</div>
+
+          <form onSubmit={handleCandidateLogin} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
+            <div>
+              <div style={{ ...labelSm, color: "#39ff14" }}>REGISTERED EMAIL</div>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => { setLoginEmail(e.target.value); setLoginErr(""); }}
+                placeholder="name@college.edu"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <div style={{ ...labelSm, color: "#ffe600" }}>SECRET PIN (4-6 DIGITS)</div>
+              <input
+                type="password"
+                value={loginPin}
+                onChange={(e) => { setLoginPin(e.target.value.replace(/[^0-9]/g, "")); setLoginErr(""); }}
+                maxLength={6}
+                placeholder="ENTER PIN"
+                style={fieldStyle}
+              />
+            </div>
+
+            {loginErr && (
+              <div style={{ ...errBase, textAlign: "center", fontSize: "8px" }}>{loginErr}</div>
+            )}
+
+            <button
+              type="submit"
+              style={{
+                cursor: "pointer",
+                fontFamily: PS,
+                fontSize: "10px",
+                color: "#04040a",
+                background: "radial-gradient(circle at 40% 30%, #eaffb0, #39ff14 55%, #0f8a00)",
+                border: "none",
+                borderRadius: "8px",
+                padding: "14px",
+                boxShadow: "0 6px 0 #0a5200, 0 0 20px rgba(57,255,20,.5)",
+                marginTop: "6px",
+              }}
+            >
+              ENTER PLAYER HQ ▶
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ width: "100%", height: "100vh", background: "#04040a" }}>
       {page === "floor" && renderFloor()}
@@ -1386,6 +1591,7 @@ export default function ArcadePage() {
       {page === "pass" && renderPass()}
       {page === "hq" && renderHQ()}
       {renderDomainDetail()}
+      {renderLoginModal()}
     </div>
   );
 }

@@ -54,81 +54,8 @@ interface Candidate {
   updatedAt: string;
 }
 
-// Initial Demo Candidates for the Guild Council to test stage progression out-of-the-box
-const INITIAL_CANDIDATES: Candidate[] = [
-  {
-    id: "cand-1",
-    playerNo: 1001,
-    name: "Alex Mercer",
-    email: "alex.mercer@college.edu",
-    branch: "Computer Science",
-    section: "A / 2nd Year",
-    phone: "+91 98765 43210",
-    collegeId: "CS2026-042",
-    domains: ["tech", "prod"],
-    answers: {
-      q1: "My biggest strength is full-stack web dev and rapid prototyping. I'm actively improving my system architecture and Docker skills.",
-      q2: "Technovation's reputation for shipping real-world projects and hackathon wins drew me in immediately.",
-      q3: "React, Next.js, Node.js, and Premiere Pro video editing.",
-      q4: "Build a production app with the club and lead a tech workshop series.",
-      q5: "I break down the roadblock, communicate with teammates, and pivot to an alternative solution quickly.",
-      q6: "Create a checklist, set milestone deadlines, test thoroughly, and deliver ahead of schedule.",
-      q7: "An Inter-College AI Hackathon with live arcade leaderboard tracking.",
-    },
-    stageIdx: 1,
-    submissionLink: "https://github.com/alex-mercer/arcade-demo",
-    notes: "Strong candidate with solid portfolio. Excellent for Technical + Production.",
-    updatedAt: "JUST NOW",
-  },
-  {
-    id: "cand-2",
-    playerNo: 1002,
-    name: "Sophia Lin",
-    email: "sophia.lin@college.edu",
-    branch: "Information Technology",
-    section: "B / 1st Year",
-    phone: "+91 98123 88765",
-    collegeId: "IT2026-089",
-    domains: ["graphics", "content"],
-    answers: {
-      q1: "Strong visual eye and Figma proficiency. Working on 3D motion graphics in Blender.",
-      q2: "Loved Technovation's retro arcade branding and wanted to design graphics that stand out.",
-      q3: "Figma, Canva, Adobe Illustrator, and copy drafting.",
-      q4: "Master motion graphics and design high-converting event posters.",
-      q5: "Stay calm, re-align on priorities, and assist teammates who are falling behind.",
-      q6: "Map out wireframes first, seek feedback early, and polish before final export.",
-      q7: "A Club Design System magazine & UI asset library for all future events.",
-    },
-    stageIdx: 2,
-    submissionLink: "https://figma.com/@sophialin_portfolio",
-    notes: "Passed screening smoothly. Great Figma skills.",
-    updatedAt: "2 HRS AGO",
-  },
-  {
-    id: "cand-3",
-    playerNo: 1003,
-    name: "David Vance",
-    email: "david.vance@college.edu",
-    branch: "Electronics & Comm",
-    section: "C / 3rd Year",
-    phone: "+91 97654 32109",
-    collegeId: "EC2026-112",
-    domains: ["events", "pr"],
-    answers: {
-      q1: "Public speaking and stage management. Working on social media analytics and growth hacking.",
-      q2: "The energetic community culture and large-scale hackathons.",
-      q3: "Event planning, sponsorship outreach, and public relations.",
-      q4: "Organize the largest tech fest of the semester with 500+ participants.",
-      q5: "Have contingency plans ready and coordinate directly with on-ground teams.",
-      q6: "Establish clear roles, maintain a shared task tracker, and do final rehearsals.",
-      q7: "A Campus Gaming Night & Esport Championship.",
-    },
-    stageIdx: 3,
-    submissionLink: "",
-    notes: "Interview scheduled for Wednesday 4 PM.",
-    updatedAt: "YESTERDAY",
-  },
-];
+// Real Applicant Data (Starts empty and populates dynamically as candidates apply)
+const INITIAL_CANDIDATES: Candidate[] = [];
 
 // Helper to safely format URLs against XSS / javascript: protocol injection
 function sanitizeUrl(url?: string): string | null {
