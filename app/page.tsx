@@ -157,6 +157,10 @@ export default function ArcadePage() {
     q1: "",
     q2: "",
     q3: "",
+    q4: "",
+    q5: "",
+    q6: "",
+    q7: "",
   });
   const [pin, setPin] = useState("");
   const [stageIdx, setStageIdx] = useState(1);
@@ -354,8 +358,8 @@ export default function ArcadePage() {
       setError("!! SELECT 2 GUILD DOMAINS TO PROCEED");
       return;
     }
-    if (!form.q1.trim() || !form.q2.trim() || !form.q3.trim()) {
-      setError("!! ANSWER ALL 3 QUEST QUESTIONS TO PROCEED");
+    if (!form.q1.trim() || !form.q2.trim() || !form.q3.trim() || !form.q4.trim() || !form.q5.trim() || !form.q6.trim() || !form.q7.trim()) {
+      setError("!! ANSWER ALL 7 QUEST QUESTIONS TO PROCEED");
       return;
     }
     setScore((s) => {
@@ -940,16 +944,25 @@ export default function ArcadePage() {
 
         {/* Section 3 */}
         <div style={panelBox}>
-          <div style={sectionHdr}><span style={{ color: "#39ff14" }}>03</span> QUEST QUESTIONS</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "clamp(14px,2vw,20px)" }}>
+          <div style={sectionHdr}><span style={{ color: "#39ff14" }}>03</span> QUEST QUESTIONS <span style={{ fontFamily: VT, fontSize: "clamp(14px,1.6vw,18px)", color: "#7de8ff", marginLeft: "8px" }}>— 7 GUILD TRIALS</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "clamp(16px,2.2vw,24px)" }}>
             {[
-              { l: "Q1 · WHY DO YOU SEEK TO JOIN THE GUILD?", k: "q1" as const },
-              { l: "Q2 · DESCRIBE YOUR GREATEST QUEST SO FAR", k: "q2" as const },
-              { l: "Q3 · WHAT SPECIAL POWER DO YOU BRING TO THE PARTY?", k: "q3" as const },
+              { num: "Q1", q: "What is your biggest strength, and what is one key skill you are actively working to improve?", k: "q1" as const },
+              { num: "Q2", q: "What specifically drew you to our club, and what excites you most about becoming a member?", k: "q2" as const },
+              { num: "Q3", q: "What core skills or talents (e.g., coding, creative design, video editing, event management, public speaking) do you want to bring to our team?", k: "q3" as const },
+              { num: "Q4", q: "What specific goals or skills do you hope to achieve and master through your journey with us this year?", k: "q4" as const },
+              { num: "Q5", q: "When working on a group project or event, how do you approach challenges when a task isn't going as planned?", k: "q5" as const },
+              { num: "Q6", q: "When given ownership of a project or task, what steps do you take to ensure it gets completed successfully from start to finish?", k: "q6" as const },
+              { num: "Q7", q: "If you could launch one new project, event, or initiative with our club this year, what would it be?", k: "q7" as const },
             ].map((q) => (
-              <div key={q.k}>
-                <div style={{ ...labelSm, color: "#39ff14" }}>{q.l}</div>
-                <textarea value={form[q.k]} onChange={setField(q.k)} rows={2} placeholder="TYPE YOUR ANSWER..." style={areaStyle} />
+              <div key={q.k} style={{ background: "rgba(255,255,255,.015)", padding: "14px 16px", borderRadius: "8px", border: "1px solid #12463f" }}>
+                <div style={{ ...labelSm, color: "#39ff14", marginBottom: "6px" }}>
+                  {q.num}
+                </div>
+                <div style={{ fontFamily: VT, fontSize: "clamp(16px,1.9vw,22px)", color: "#ffe600", marginBottom: "10px", lineHeight: 1.35 }}>
+                  "{q.q}"
+                </div>
+                <textarea value={form[q.k]} onChange={setField(q.k)} rows={3} placeholder="TYPE YOUR ANSWER..." style={areaStyle} />
               </div>
             ))}
           </div>
