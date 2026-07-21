@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 
 // ---- config (edit freely) ----
 const CLUB_NAME = "TECHNOVATION";
@@ -703,7 +704,13 @@ export default function ArcadePage() {
               <span style={{ fontFamily: PS, fontSize: "11px", color: "#00f0ff", textShadow: "0 0 8px #00f0ff" }}>►</span>
             </div>
 
-            {/* high score */}
+            {/* high score & admin portal */}
+            <div style={{ position: "absolute", top: "8.2%", left: "2.5%", zIndex: 7, textAlign: "left" }}>
+              <Link href="/admin" style={{ fontFamily: PS, fontSize: "9px", color: "#ff2bd1", border: "1.5px solid #ff2bd166", background: "rgba(255,43,209,.1)", borderRadius: "4px", padding: "6px 10px", display: "inline-block", textShadow: "0 0 8px #ff2bd1" }}>
+                🛡 ADMIN PORTAL
+              </Link>
+            </div>
+
             <div style={{ position: "absolute", top: "8.2%", right: "2.5%", zIndex: 7, textAlign: "right", fontFamily: PS, lineHeight: 1.7 }}>
               <div style={{ fontSize: "9px", color: "#ffe600", textShadow: "0 0 8px #ffe600" }}>HIGH SCORE</div>
               <div style={{ fontSize: "clamp(14px,1.8vw,22px)", color: "#39ff14", textShadow: "0 0 10px #39ff14", letterSpacing: "2px" }}>{scoreStr}</div>

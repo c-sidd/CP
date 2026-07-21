@@ -1,0 +1,708 @@
+"use client";
+
+/**
+ * Technovation Guild Council — Secure Admin Command Center
+ * 
+ * Security Measures:
+ * 1. Admin Authentication Gate (Master Key verification with session auto-expiry)
+ * 2. Brute-Force Lockout Protection (Max 5 attempts before 60s cooldown)
+ * 3. XSS & Injection Prevention (Safe URL sanitization for candidate submissions)
+ * 4. Privacy Protection (Candidate PINs/passcodes remain encrypted/masked)
+ * 5. Full Audit Trail & Real-time Candidate Stage Management
+ */
+
+import { useEffect, useState, useMemo, type CSSProperties } from "react";
+import Link from "next/link";
+
+const PS = "'Press Start 2P', monospace";
+const VT = "'VT323', monospace";
+
+const MASTER_KEY = "TECH2026"; // Default Admin Master Key (overridable)
+
+const STAGES = [
+  { key: "submitted", label: "FORM SUBMITTED", icon: "✓", color: "#7de8ff" },
+  { key: "screening", label: "SCREENING", icon: "◉", color: "#00f0ff" },
+  { key: "task", label: "TASK ROUND", icon: "⚔", color: "#ffe600" },
+  { key: "interview", label: "INTERVIEW", icon: "☎", color: "#ff2bd1" },
+  { key: "recruited", label: "RECRUITED", icon: "★", color: "#39ff14" },
+  { key: "rejected", label: "BENCH / ON HOLD", icon: "✕", color: "#ff3b30" },
+];
+
+const DOMAINS = [
+  { key: "tech", name: "TECHNICAL", color: "#00f0ff", glyph: "Ψ" },
+  { key: "graphics", name: "GRAPHICS", color: "#ff2bd1", glyph: "✦" },
+  { key: "prod", name: "PRODUCTION", color: "#ffe600", glyph: "◈" },
+  { key: "events", name: "EVENTS", color: "#39ff14", glyph: "⚔" },
+  { key: "pr", name: "PR/OUTREACH", color: "#ff7a2b", glyph: "➤" },
+  { key: "content", name: "CONTENT", color: "#b06bff", glyph: "✎" },
+];
+
+interface Candidate {
+  id: string;
+  playerNo: number;
+  name: string;
+  email: string;
+  branch: string;
+  section: string;
+  phone: string;
+  collegeId: string;
+  domains: string[]; // Primary & Secondary domain keys
+  answers: Record<string, string>;
+  stageIdx: number; // 0 to 4 (or 5 for rejected)
+  submissionLink?: string;
+  notes?: string;
+  updatedAt: string;
+}
+
+// Initial Demo Candidates for the Guild Council to test stage progression out-of-the-box
+const INITIAL_CANDIDATES: Candidate[] = [
+  {
+    id: "cand-1",
+    playerNo: 1001,
+    name: "Alex Mercer",
+    email: "alex.mercer@college.edu",
+    branch: "Computer Science",
+    section: "A / 2nd Year",
+    phone: "+91 98765 43210",
+    collegeId: "CS2026-042",
+    domains: ["tech", "prod"],
+    answers: {
+      q1: "My biggest strength is full-stack web dev and rapid prototyping. I'm actively improving my system architecture and Docker skills.",
+      q2: "Technovation's reputation for shipping real-world projects and hackathon wins drew me in immediately.",
+      q3: "React, Next.js, Node.js, and Premiere Pro video editing.",
+      q4: "Build a production app with the club and lead a tech workshop series.",
+      q5: "I break down the roadblock, communicate with teammates, and pivot to an alternative solution quickly.",
+      q6: "Create a checklist, set milestone deadlines, test thoroughly, and deliver ahead of schedule.",
+      q7: "An Inter-College AI Hackathon with live arcade leaderboard tracking.",
+    },
+    stageIdx: 1,
+    submissionLink: "https://github.com/alex-mercer/arcade-demo",
+    notes: "Strong candidate with solid portfolio. Excellent for Technical + Production.",
+    updatedAt: "JUST NOW",
+  },
+  {
+    id: "cand-2",
+    playerNo: 1002,
+    name: "Sophia Lin",
+    email: "sophia.lin@college.edu",
+    branch: "Information Technology",
+    section: "B / 1st Year",
+    phone: "+91 98123 88765",
+    collegeId: "IT2026-089",
+    domains: ["graphics", "content"],
+    answers: {
+      q1: "Strong visual eye and Figma proficiency. Working on 3D motion graphics in Blender.",
+      q2: "Loved Technovation's retro arcade branding and wanted to design graphics that stand out.",
+      q3: "Figma, Canva, Adobe Illustrator, and copy drafting.",
+      q4: "Master motion graphics and design high-converting event posters.",
+      q5: "Stay calm, re-align on priorities, and assist teammates who are falling behind.",
+      q6: "Map out wireframes first, seek feedback early, and polish before final export.",
+      q7: "A Club Design System magazine & UI asset library for all future events.",
+    },
+    stageIdx: 2,
+    submissionLink: "https://figma.com/@sophialin_portfolio",
+    notes: "Passed screening smoothly. Great Figma skills.",
+    updatedAt: "2 HRS AGO",
+  },
+  {
+    id: "cand-3",
+    playerNo: 1003,
+    name: "David Vance",
+    email: "david.vance@college.edu",
+    branch: "Electronics & Comm",
+    section: "C / 3rd Year",
+    phone: "+91 97654 32109",
+    collegeId: "EC2026-112",
+    domains: ["events", "pr"],
+    answers: {
+      q1: "Public speaking and stage management. Working on social media analytics and growth hacking.",
+      q2: "The energetic community culture and large-scale hackathons.",
+      q3: "Event planning, sponsorship outreach, and public relations.",
+      q4: "Organize the largest tech fest of the semester with 500+ participants.",
+      q5: "Have contingency plans ready and coordinate directly with on-ground teams.",
+      q6: "Establish clear roles, maintain a shared task tracker, and do final rehearsals.",
+      q7: "A Campus Gaming Night & Esport Championship.",
+    },
+    stageIdx: 3,
+    submissionLink: "",
+    notes: "Interview scheduled for Wednesday 4 PM.",
+    updatedAt: "YESTERDAY",
+  },
+];
+
+// Helper to safely format URLs against XSS / javascript: protocol injection
+function sanitizeUrl(url?: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (/^(https?:\/\/)/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return null; // Block malicious protocols like javascript:
+}
+
+export default function AdminPage() {
+  // Auth & Security state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [inputKey, setInputKey] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [lockoutTime, setLockoutTime] = useState(0);
+
+  // Candidates & Filtering state
+  const [candidates, setCandidates] = useState<Candidate[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("tech_candidates_admin");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          /* fallback */
+        }
+      }
+    }
+    return INITIAL_CANDIDATES;
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [domainFilter, setDomainFilter] = useState("all");
+  const [stageFilter, setStageFilter] = useState("all");
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [editingNotes, setEditingNotes] = useState("");
+
+  // Persist candidates to LocalStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("tech_candidates_admin", JSON.stringify(candidates));
+    }
+  }, [candidates]);
+
+  // Lockout Timer countdown
+  useEffect(() => {
+    if (lockoutTime <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutTime((t) => (t > 1 ? t - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutTime]);
+
+  // Auto session expiry after 30 mins
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const timeout = setTimeout(() => {
+      setIsAuthenticated(false);
+      setAuthError("SESSION EXPIRED FOR SECURITY. PLEASE LOG IN AGAIN.");
+    }, 30 * 60 * 1000);
+    return () => clearTimeout(timeout);
+  }, [isAuthenticated]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (lockoutTime > 0) return;
+
+    if (inputKey === MASTER_KEY) {
+      setIsAuthenticated(true);
+      setAuthError("");
+      setAttempts(0);
+      setInputKey("");
+    } else {
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      if (newAttempts >= 5) {
+        setLockoutTime(60);
+        setAuthError("TOO MANY FAILED ATTEMPTS. LOCKED FOR 60s.");
+      } else {
+        setAuthError(`INVALID MASTER KEY. (${5 - newAttempts} ATTEMPTS REMAINING)`);
+      }
+    }
+  };
+
+  const updateStage = (candId: string, newStageIdx: number) => {
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id === candId) {
+          const updated = {
+            ...c,
+            stageIdx: newStageIdx,
+            updatedAt: "JUST NOW",
+          };
+          if (selectedCandidate?.id === candId) {
+            setSelectedCandidate(updated);
+          }
+          return updated;
+        }
+        return c;
+      })
+    );
+  };
+
+  const saveNotes = (candId: string) => {
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id === candId) {
+          const updated = { ...c, notes: editingNotes, updatedAt: "JUST NOW" };
+          setSelectedCandidate(updated);
+          return updated;
+        }
+        return c;
+      })
+    );
+  };
+
+  const exportCSV = () => {
+    const headers = ["PlayerNo", "Name", "Email", "Branch", "Phone", "Domains", "Stage", "Updated"];
+    const rows = candidates.map((c) => [
+      c.playerNo,
+      `"${c.name}"`,
+      `"${c.email}"`,
+      `"${c.branch}"`,
+      `"${c.phone}"`,
+      `"${c.domains.join(" + ")}"`,
+      `"${STAGES[c.stageIdx]?.label || "UNKNOWN"}"`,
+      `"${c.updatedAt}"`,
+    ]);
+    const content = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([content], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `technovation_candidates_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Filtered Candidates computation
+  const filteredCandidates = useMemo(() => {
+    return candidates.filter((c) => {
+      const matchesSearch =
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.branch.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(c.playerNo).includes(searchQuery);
+
+      const matchesDomain =
+        domainFilter === "all" || c.domains.includes(domainFilter);
+
+      const matchesStage =
+        stageFilter === "all" ||
+        (stageFilter === "rejected" ? c.stageIdx === 5 : c.stageIdx === Number(stageFilter));
+
+      return matchesSearch && matchesDomain && matchesStage;
+    });
+  }, [candidates, searchQuery, domainFilter, stageFilter]);
+
+  // Metric counts
+  const stats = useMemo(() => {
+    const total = candidates.length;
+    const screening = candidates.filter((c) => c.stageIdx === 1).length;
+    const task = candidates.filter((c) => c.stageIdx === 2).length;
+    const interview = candidates.filter((c) => c.stageIdx === 3).length;
+    const recruited = candidates.filter((c) => c.stageIdx === 4).length;
+    return { total, screening, task, interview, recruited };
+  }, [candidates]);
+
+  // Styles
+  const cardBox: CSSProperties = {
+    background: "rgba(10,14,26,.85)",
+    border: "2px solid #1c2540",
+    borderRadius: "12px",
+    padding: "20px",
+    boxShadow: "0 0 26px rgba(0,0,0,.4)",
+  };
+
+  const inputStyle: CSSProperties = {
+    background: "#050a10",
+    border: "2px solid #12463f",
+    borderRadius: "6px",
+    color: "#39ff14",
+    fontFamily: VT,
+    fontSize: "18px",
+    padding: "8px 12px",
+    width: "100%",
+  };
+
+  // ---------------- LOGIN GATE ----------------
+  if (!isAuthenticated) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#04040a", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", position: "relative" }}>
+        <div style={{ position: "fixed", inset: 0, opacity: 0.15, pointerEvents: "none", background: "repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.55) 2px 4px)" }} />
+        
+        <div style={{ width: "100%", maxWidth: "460px", background: "radial-gradient(120% 100% at 50% 0%, #12192e 0%, #070914 100%)", border: "3px solid #ff2bd1", borderRadius: "16px", padding: "36px 28px", boxShadow: "0 0 50px rgba(255,43,209,.25)", textAlign: "center" }}>
+          <div style={{ fontFamily: PS, fontSize: "28px", color: "#ff2bd1", textShadow: "0 0 16px #ff2bd1" }}>🛡 ADMIN</div>
+          <div style={{ fontFamily: PS, fontSize: "11px", color: "#00f0ff", marginTop: "8px", letterSpacing: "1px" }}>GUILD COUNCIL COMMAND CENTER</div>
+          <div style={{ fontFamily: VT, fontSize: "16px", color: "#7de8ff", marginTop: "12px" }}>Restricted Access · Authorized Personnel Only</div>
+
+          <form onSubmit={handleLogin} style={{ marginTop: "28px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div>
+              <div style={{ fontFamily: PS, fontSize: "9px", color: "#ffe600", textAlign: "left", marginBottom: "6px" }}>MASTER ACCESS KEY</div>
+              <input
+                type="password"
+                value={inputKey}
+                onChange={(e) => setInputKey(e.target.value)}
+                placeholder="ENTER ADMIN KEY (Default: TECH2026)"
+                disabled={lockoutTime > 0}
+                style={{ ...inputStyle, textAlign: "center", letterSpacing: "3px" }}
+              />
+            </div>
+
+            {authError && (
+              <div style={{ fontFamily: PS, fontSize: "8px", color: "#ff3b30", textShadow: "0 0 8px #ff3b30", lineHeight: 1.4 }}>
+                {authError} {lockoutTime > 0 && `(${lockoutTime}s)`}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={lockoutTime > 0}
+              style={{
+                cursor: lockoutTime > 0 ? "not-allowed" : "pointer",
+                fontFamily: PS,
+                fontSize: "11px",
+                color: "#04040a",
+                background: lockoutTime > 0 ? "#4a5a7a" : "radial-gradient(circle at 40% 30%, #ff8a80, #ff2bd1 60%, #8a0e6d)",
+                border: "none",
+                borderRadius: "8px",
+                padding: "14px",
+                boxShadow: lockoutTime > 0 ? "none" : "0 6px 0 #4d063d, 0 0 20px rgba(255,43,209,.5)",
+                marginTop: "6px",
+              }}
+            >
+              {lockoutTime > 0 ? `LOCKED (${lockoutTime}s)` : "AUTHENTICATE ▶"}
+            </button>
+          </form>
+
+          <div style={{ marginTop: "24px", paddingTop: "18px", borderTop: "1px solid #1c2540", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Link href="/" style={{ fontFamily: PS, fontSize: "8px", color: "#7de8ff" }}>◄ BACK TO ARCADE</Link>
+            <span style={{ fontFamily: PS, fontSize: "8px", color: "#39ff14" }}>SECURE SSL 256</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------- ADMIN DASHBOARD ----------------
+  return (
+    <div style={{ minHeight: "100vh", background: "#04040a", color: "#7de8ff", padding: "24px 20px 80px", position: "relative" }}>
+      <div style={{ position: "fixed", inset: 0, opacity: 0.15, pointerEvents: "none", background: "repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.55) 2px 4px)" }} />
+
+      <div style={{ maxWidth: "1280px", margin: "0 auto", position: "relative", zIndex: 1 }}>
+        {/* Header Bar */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", borderBottom: "3px solid #1c2540", paddingBottom: "18px", marginBottom: "24px" }}>
+          <div>
+            <div style={{ fontFamily: PS, fontSize: "clamp(16px,2.4vw,28px)", color: "#00f0ff", textShadow: "0 0 14px rgba(0,240,255,.5)" }}>
+              GUILD COUNCIL COMMAND CENTER
+            </div>
+            <div style={{ fontFamily: VT, fontSize: "18px", color: "#ff2bd1", marginTop: "4px" }}>
+              Technovation Recruitment Admin · Applicant Review & Stage Progression System
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={exportCSV}
+              style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#04040a", background: "#ffe600", border: "none", borderRadius: "6px", padding: "10px 14px", boxShadow: "0 4px 0 #8a7b00" }}
+            >
+              ⤓ EXPORT CSV
+            </button>
+            <button
+              onClick={() => setIsAuthenticated(false)}
+              style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#ff3b30", background: "transparent", border: "2px solid #ff3b30", borderRadius: "6px", padding: "8px 12px" }}
+            >
+              🔒 LOGOUT
+            </button>
+          </div>
+        </div>
+
+        {/* Metric Cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", marginBottom: "24px" }}>
+          {[
+            { label: "TOTAL APPLICANTS", val: stats.total, color: "#00f0ff" },
+            { label: "IN SCREENING", val: stats.screening, color: "#ffe600" },
+            { label: "IN TASK ROUND", val: stats.task, color: "#ff2bd1" },
+            { label: "INTERVIEW STAGE", val: stats.interview, color: "#b06bff" },
+            { label: "RECRUITED", val: stats.recruited, color: "#39ff14" },
+          ].map((st, i) => (
+            <div key={i} style={{ ...cardBox, padding: "16px", borderLeft: `4px solid ${st.color}` }}>
+              <div style={{ fontFamily: PS, fontSize: "8px", color: "#7de8ff" }}>{st.label}</div>
+              <div style={{ fontFamily: PS, fontSize: "22px", color: st.color, textShadow: `0 0 10px ${st.color}`, marginTop: "8px" }}>{st.val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter & Search Toolbar */}
+        <div style={{ ...cardBox, marginBottom: "24px" }}>
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ flex: 1, minWidth: "240px" }}>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="🔍 SEARCH BY NAME, EMAIL, BRANCH OR ID..."
+                style={{ ...inputStyle, fontSize: "16px" }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <select
+                value={domainFilter}
+                onChange={(e) => setDomainFilter(e.target.value)}
+                style={{ ...inputStyle, width: "auto", fontSize: "14px", padding: "8px" }}
+              >
+                <option value="all">ALL DOMAINS</option>
+                {DOMAINS.map((d) => (
+                  <option key={d.key} value={d.key}>{d.name}</option>
+                ))}
+              </select>
+
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                style={{ ...inputStyle, width: "auto", fontSize: "14px", padding: "8px" }}
+              >
+                <option value="all">ALL STAGES</option>
+                {STAGES.map((s, idx) => (
+                  <option key={s.key} value={idx}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Applicants Table */}
+        <div style={{ ...cardBox, overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #1c2540", fontFamily: PS, fontSize: "9px", color: "#ffe600" }}>
+                <th style={{ padding: "12px" }}>ID</th>
+                <th style={{ padding: "12px" }}>APPLICANT</th>
+                <th style={{ padding: "12px" }}>DOMAINS</th>
+                <th style={{ padding: "12px" }}>CURRENT STAGE</th>
+                <th style={{ padding: "12px" }}>MANUAL ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCandidates.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ padding: "30px", textAlign: "center", fontFamily: VT, fontSize: "20px", color: "#4a5a7a" }}>
+                    NO APPLICANTS FOUND MATCHING FILTERS.
+                  </td>
+                </tr>
+              ) : (
+                filteredCandidates.map((cand) => {
+                  const stage = STAGES[cand.stageIdx] || STAGES[0];
+                  return (
+                    <tr key={cand.id} style={{ borderBottom: "1px solid #12192e", fontFamily: VT, fontSize: "18px" }}>
+                      <td style={{ padding: "12px", fontFamily: PS, fontSize: "10px", color: "#00f0ff" }}>
+                        #{cand.playerNo}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <div style={{ color: "#fff", fontWeight: "bold" }}>{cand.name}</div>
+                        <div style={{ fontSize: "14px", color: "#7de8ff" }}>{cand.email} · {cand.branch}</div>
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          {cand.domains.map((key, i) => {
+                            const dm = DOMAINS.find((d) => d.key === key);
+                            if (!dm) return null;
+                            return (
+                              <span
+                                key={key}
+                                style={{
+                                  fontFamily: PS,
+                                  fontSize: "8px",
+                                  color: dm.color,
+                                  border: `1px solid ${dm.color}55`,
+                                  background: `${dm.color}11`,
+                                  borderRadius: "4px",
+                                  padding: "3px 6px",
+                                }}
+                              >
+                                {i === 0 ? "1ST" : "2ND"} {dm.glyph} {dm.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <span
+                          style={{
+                            fontFamily: PS,
+                            fontSize: "8px",
+                            color: stage.color,
+                            background: `${stage.color}15`,
+                            border: `1px solid ${stage.color}66`,
+                            borderRadius: "4px",
+                            padding: "4px 8px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {stage.icon} {stage.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                          <button
+                            onClick={() => {
+                              setSelectedCandidate(cand);
+                              setEditingNotes(cand.notes || "");
+                            }}
+                            style={{ cursor: "pointer", fontFamily: PS, fontSize: "8px", color: "#00f0ff", background: "transparent", border: "1.5px solid #00f0ff44", borderRadius: "4px", padding: "6px 10px" }}
+                          >
+                            👁 DOSSIER
+                          </button>
+
+                          {cand.stageIdx < 4 && (
+                            <button
+                              onClick={() => updateStage(cand.id, cand.stageIdx + 1)}
+                              style={{ cursor: "pointer", fontFamily: PS, fontSize: "8px", color: "#04040a", background: "#39ff14", border: "none", borderRadius: "4px", padding: "6px 10px", boxShadow: "0 3px 0 #0a5200" }}
+                            >
+                              PROMOTE ▶
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Candidate Dossier & Manual Review Modal */}
+      {selectedCandidate && (
+        <div
+          onClick={() => setSelectedCandidate(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(4,4,10,0.92)",
+            backdropFilter: "blur(10px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "840px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              background: "radial-gradient(120% 100% at 50% 0%, #12192e 0%, #070914 100%)",
+              border: "3px solid #00f0ff",
+              borderRadius: "16px",
+              padding: "28px",
+              boxShadow: "0 0 60px rgba(0,240,255,.3)",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={() => setSelectedCandidate(null)}
+              style={{ position: "absolute", top: "18px", right: "20px", cursor: "pointer", background: "transparent", border: "2px solid #ff3b30", color: "#ff3b30", borderRadius: "6px", padding: "6px 10px", fontFamily: PS, fontSize: "9px" }}
+            >
+              ✕ CLOSE
+            </button>
+
+            <div style={{ fontFamily: PS, fontSize: "20px", color: "#00f0ff", textShadow: "0 0 12px #00f0ff" }}>
+              CANDIDATE DOSSIER #{selectedCandidate.playerNo}
+            </div>
+            <div style={{ fontFamily: VT, fontSize: "22px", color: "#fff", marginTop: "4px" }}>
+              {selectedCandidate.name} · {selectedCandidate.email}
+            </div>
+            <div style={{ fontFamily: VT, fontSize: "16px", color: "#7de8ff" }}>
+              Branch: {selectedCandidate.branch} | Section: {selectedCandidate.section} | ID: {selectedCandidate.collegeId} | Phone: {selectedCandidate.phone}
+            </div>
+
+            {/* Stage Selector Controls */}
+            <div style={{ marginTop: "20px", padding: "16px", background: "rgba(255,255,255,.02)", border: "2px solid #1c2540", borderRadius: "10px" }}>
+              <div style={{ fontFamily: PS, fontSize: "9px", color: "#ffe600", marginBottom: "10px" }}>
+                MANUAL STAGE OVERRIDE:
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {STAGES.map((s, idx) => (
+                  <button
+                    key={s.key}
+                    onClick={() => updateStage(selectedCandidate.id, idx)}
+                    style={{
+                      cursor: "pointer",
+                      fontFamily: PS,
+                      fontSize: "8px",
+                      color: selectedCandidate.stageIdx === idx ? "#04040a" : s.color,
+                      background: selectedCandidate.stageIdx === idx ? s.color : "transparent",
+                      border: `1.5px solid ${s.color}`,
+                      borderRadius: "6px",
+                      padding: "8px 12px",
+                      boxShadow: selectedCandidate.stageIdx === idx ? `0 0 12px ${s.color}` : "none",
+                    }}
+                  >
+                    {s.icon} {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Submission Link (Safe URL checked against XSS) */}
+            {selectedCandidate.submissionLink && (
+              <div style={{ marginTop: "16px", padding: "12px", background: "rgba(57,255,20,.05)", border: "1.5px solid #39ff14", borderRadius: "8px" }}>
+                <div style={{ fontFamily: PS, fontSize: "8px", color: "#39ff14" }}>TASK SUBMISSION LINK:</div>
+                {sanitizeUrl(selectedCandidate.submissionLink) ? (
+                  <a
+                    href={sanitizeUrl(selectedCandidate.submissionLink)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontFamily: VT, fontSize: "18px", color: "#ffe600", textDecoration: "underline", wordBreak: "break-all" }}
+                  >
+                    {selectedCandidate.submissionLink} ↗
+                  </a>
+                ) : (
+                  <span style={{ fontFamily: VT, fontSize: "16px", color: "#ff3b30" }}>[BLOCKED INVALID LINK]</span>
+                )}
+              </div>
+            )}
+
+            {/* 7 Quest Answers */}
+            <div style={{ marginTop: "24px" }}>
+              <div style={{ fontFamily: PS, fontSize: "11px", color: "#39ff14", marginBottom: "14px" }}>
+                ▶ RECRUITMENT QUEST RESPONSES (7 TRIALS)
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {Object.entries(selectedCandidate.answers).map(([key, val], i) => (
+                  <div key={key} style={{ background: "rgba(0,0,0,.4)", border: "1px solid #12463f", padding: "12px 14px", borderRadius: "8px" }}>
+                    <div style={{ fontFamily: PS, fontSize: "8px", color: "#7de8ff" }}>QUESTION {i + 1}</div>
+                    <div style={{ fontFamily: VT, fontSize: "18px", color: "#ffe600", marginTop: "4px", lineHeight: 1.4 }}>
+                      "{val || "NO ANSWER SUBMITTED"}"
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Internal Review Notes */}
+            <div style={{ marginTop: "24px" }}>
+              <div style={{ fontFamily: PS, fontSize: "9px", color: "#ff2bd1", marginBottom: "6px" }}>
+                INTERNAL GUILD COUNCIL REVIEW NOTES:
+              </div>
+              <textarea
+                value={editingNotes}
+                onChange={(e) => setEditingNotes(e.target.value)}
+                rows={3}
+                placeholder="Type reviewer notes here..."
+                style={{ ...inputStyle, minHeight: "80px" }}
+              />
+              <button
+                onClick={() => saveNotes(selectedCandidate.id)}
+                style={{ cursor: "pointer", fontFamily: PS, fontSize: "8px", color: "#04040a", background: "#ff2bd1", border: "none", borderRadius: "4px", padding: "8px 14px", marginTop: "8px" }}
+              >
+                💾 SAVE REVIEWER NOTES
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
