@@ -346,8 +346,16 @@ export default function ArcadePage() {
     if (sc) sc.scrollTo({ top: sc.scrollHeight * 0.62, behavior: "smooth" });
   };
   const onSaveData = () => {
-    if (!form.name.trim() || !form.email.trim() || !form.branch.trim() || !form.phone.trim() || selectedClasses.length < 2) {
-      setError("!! INCOMPLETE — NAME, EMAIL, BRANCH, PHONE & 2 CLASSES REQUIRED");
+    if (!form.name.trim() || !form.email.trim() || !form.branch.trim() || !form.section.trim() || !form.phone.trim() || !form.college.trim()) {
+      setError("!! ALL PLAYER FILE FIELDS ARE REQUIRED");
+      return;
+    }
+    if (selectedClasses.length < 2) {
+      setError("!! SELECT 2 GUILD DOMAINS TO PROCEED");
+      return;
+    }
+    if (!form.q1.trim() || !form.q2.trim() || !form.q3.trim()) {
+      setError("!! ANSWER ALL 3 QUEST QUESTIONS TO PROCEED");
       return;
     }
     setScore((s) => {
@@ -736,7 +744,7 @@ export default function ArcadePage() {
                   <div style={{ fontFamily: PS, fontSize: "clamp(9px,1.3vw,14px)", color: "#ffe600", textShadow: "0 0 8px #ffe600", letterSpacing: "1px", marginBottom: "2.5%" }}>
                     ▶ EXPLORE OUR DOMAINS — 6 GUILD STAGES
                   </div>
-                  <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gridTemplateRows: "repeat(2,1fr)", gap: "2.4%" }}>
+                  <div className="crt-domain-grid">
                     {DOMAINS.map((d) => (
                       <div key={d.key} style={cabStyle(d)} onClick={() => openDetail(d.key)} onMouseEnter={() => setHover(d.key)} onMouseLeave={() => setHover("")}>
                         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: d.color, boxShadow: "0 0 10px " + d.color }} />
@@ -788,7 +796,7 @@ export default function ArcadePage() {
                 {/* Hook form */}
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                   <div style={{ fontFamily: PS, fontSize: "clamp(9px,1.2vw,14px)", color: "#ff2bd1", textShadow: "0 0 10px #ff2bd1", letterSpacing: "1px" }}>QUICK HOOK · INSERT PLAYER DATA</div>
-                  <div style={{ display: "flex", gap: "10px", width: "100%", maxWidth: "520px" }}>
+                  <div className="hook-form-inputs">
                     <input value={form.name} onChange={setField("name")} placeholder="PLAYER NAME" style={hookInput} />
                     <input value={form.email} onChange={setField("email")} placeholder="EMAIL" style={hookInput} />
                   </div>
@@ -841,7 +849,7 @@ export default function ArcadePage() {
         {/* Section 1 */}
         <div style={panelBox}>
           <div style={sectionHdr}><span style={{ color: "#00f0ff" }}>01</span> PLAYER FILE</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "clamp(12px,2vw,20px)" }}>
+          <div className="player-form-grid">
             {[
               { l: "PLAYER NAME", k: "name" as const, ph: "ENTER NAME" },
               { l: "COLLEGE EMAIL", k: "email" as const, ph: "name@college.edu" },
@@ -864,7 +872,7 @@ export default function ArcadePage() {
           <div style={{ fontFamily: VT, fontSize: "clamp(14px,1.6vw,18px)", color: "#a9c3d6", marginBottom: "clamp(12px,1.8vw,18px)" }}>
             Select your <span style={{ color: "#00f0ff", textShadow: "0 0 6px #00f0ff" }}>PRIMARY</span> and <span style={{ color: "#ff2bd1", textShadow: "0 0 6px #ff2bd1" }}>SECONDARY</span> guild domains. Your 1st pick is your primary class.
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "clamp(10px,1.6vw,16px)" }}>
+          <div className="class-select-grid">
             {DOMAINS.map((d) => {
               const idx = selectedClasses.indexOf(d.key);
               const isPrimary = idx === 0;

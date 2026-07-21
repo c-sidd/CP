@@ -53,3 +53,70 @@ button { font-family: 'Press Start 2P', monospace; }
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ---- Responsive Layout Utilities ---- */
+.player-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(12px, 2vw, 20px);
+}
+
+.class-select-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(10px, 1.6vw, 16px);
+}
+
+.crt-domain-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2.4%;
+}
+
+.hook-form-inputs {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+
+@media (max-width: 768px) {
+  .class-select-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .player-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .crt-domain-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .class-select-grid {
+    grid-template-columns: 1fr;
+  }
+  .hook-form-inputs {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* Touch & Mobile UX Enhancements */
+@media (max-width: 640px) {
+  button, input, textarea {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS safari */
+  }
+  
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
