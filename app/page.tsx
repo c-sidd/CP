@@ -441,6 +441,34 @@ export default function ArcadePage() {
     goTo("hq");
   };
 
+  const onSubmitTask = () => {
+    if (!taskInput.trim()) return;
+    setTaskSubmitted(true);
+    setStageIdx((s) => Math.max(s, 2));
+
+    // Save submission link to real candidate store
+    try {
+      const existingRaw = localStorage.getItem("tech_candidates_admin");
+      if (existingRaw) {
+        const list = JSON.parse(existingRaw);
+        const updated = list.map((c: any) => {
+          if (c.email.toLowerCase() === form.email.trim().toLowerCase()) {
+            return { ...c, submissionLink: taskInput.trim(), updatedAt: "JUST NOW" };
+          }
+          return c;
+        });
+        localStorage.setItem("tech_candidates_admin", JSON.stringify(updated));
+      }
+    } catch {
+      /* fallback */
+    }
+
+    setComms((cs) => [
+      { id: "c" + Date.now(), icon: "⚔", color: "#39ff14", title: "TASK SUBMITTED", body: "Round 1 quest received. The council will judge your work soon. +50 XP", time: "JUST NOW" },
+      ...cs,
+    ]);
+  };
+
   const handleCandidateLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim() || !loginPin.trim()) {
