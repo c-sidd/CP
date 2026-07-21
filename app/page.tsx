@@ -26,14 +26,14 @@ const DOMAINS = [
   {
     key: "graphics", name: "GRAPHICS", stage: "PIXEL STUDIO", glyph: "✦", color: "#ff2bd1", cls: "ARTIFICER",
     desc: "The Pixel Studio is where visual magic is born. Our Artificers craft everything the world sees — event posters, social media creatives, brand identity kits, UI/UX mockups, motion graphics, and animated reels. You'll master design tools, develop a keen eye for typography and color theory, and create scroll-stopping visuals that define Technovation's aesthetic. Every pixel you place tells a story.",
-    skills: ["Graphic Design & Illustration", "UI/UX Design", "Motion Graphics & Animation", "Brand Identity Systems", "Video Editing & Thumbnails"],
+    skills: ["Graphic Design & Illustration", "UI/UX Design", "Motion Graphics & Animation", "Figma & Canva"],
     quest: "Design the visuals that make the world stop scrolling.",
   },
   {
     key: "prod", name: "PRODUCTION", stage: "STAGE MASTER", glyph: "◈", color: "#ffe600", cls: "TANK",
-    desc: "Stage Masters are the operational powerhouses — the planners, the fixers, the ones who make sure every event runs like a well-oiled machine. From venue logistics and vendor coordination to budgets, timelines, and on-ground execution, the Production guild handles the chaos so others can create. You'll manage large-scale tech fests, workshops, and hackathons from concept to curtain call.",
-    skills: ["Event Planning & Logistics", "Budget Management", "Vendor & Venue Coordination", "Team Leadership", "Crisis Management"],
-    quest: "Orchestrate flawless events from blueprint to spotlight.",
+    desc: "The Stage Masters are the visual storytellers behind Technovation's video presence. From shooting and editing event recap videos, promo reels, and cinematic teasers to creating YouTube content, podcast visuals, and behind-the-scenes footage — the Production guild brings every moment to life on screen. You'll work with professional editing software, master color grading, sound design, and pacing to produce content that captures attention and tells compelling stories.",
+    skills: ["Video Editing & Post-Production", "Cinematography & Shooting", "Color Grading & Sound Design", "Reels, Shorts & YouTube Content", "Scriptwriting & Storyboarding"],
+    quest: "Capture the moments — edit the stories that go viral.",
   },
   {
     key: "events", name: "EVENTS", stage: "BOSS ARENA", glyph: "⚔", color: "#39ff14", cls: "WARRIOR",
