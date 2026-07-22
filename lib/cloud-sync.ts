@@ -105,18 +105,39 @@ function merge(cloud: Cand[], local: Cand[]): Cand[] {
 let lastHash = "";
 let started = false;
 
+const log = (...a: unknown[]) => console.info("%c[cloud-sync]", "color:#39ff14", ...a);
+const warn = (...a: unknown[]) => console.warn("[cloud-sync]", ...a);
+
 export function initCloudSync(): void {
-  if (started || !isSupabaseConfigured || !supabase || typeof window === "undefined") return;
+  if (typeof window === "undefined") return;
+  if (!isSupabaseConfigured || !supabase) {
+    warn("Supabase not configured — running local-only. Set NEXT_PUBLIC_SUPABASE_URL and a key in .env.local, then restart.");
+    return;
+  }
+  if (started) return;
   started = true;
   const sb = supabase;
+  log("starting… syncing localStorage <-> Supabase 'candidates' table");
 
   const pullMerge = async () => {
-    const { data, error } = await sb.from("candidates").select("*");
-    if (error || !data) return;
-    const merged = merge(data.map(candFromRow), readLocal());
-    const h = JSON.stringify(merged);
-    if (h !== JSON.stringify(readLocal())) writeLocal(merged);
-    lastHash = h;
+    try {
+      const { data, error } = await sb.from("candidates").select("*");
+      if (error) {
+        warn("read failed:", error.message || error);
+        return;
+      }
+      const merged = merge((data || []).map(candFromRow), readLocal());
+      const h = JSON.stringify(merged);
+      if (h !== JSON.stringify(readLocal())) {
+        lastHash = h; // set before write so our own storage event doesn't re-push
+        writeLocal(merged);
+        log("pulled", (data || []).length, "cloud rows → local now has", merged.length);
+      } else {
+        lastHash = h;
+      }
+    } catch (e) {
+      warn("read error:", e);
+    }
   };
 
   const pushLocal = async () => {
@@ -125,8 +146,14 @@ export function initCloudSync(): void {
     if (h === lastHash) return;
     lastHash = h;
     if (!local.length) return;
-    const rows = local.map(rowFromCand);
-    await sb.from("candidates").upsert(rows, { onConflict: "email" });
+    try {
+      const rows = local.map(rowFromCand);
+      const { error } = await sb.from("candidates").upsert(rows, { onConflict: "email" });
+      if (error) warn("write failed:", error.message || error);
+      else log("pushed", rows.length, "rows to Supabase");
+    } catch (e) {
+      warn("write error:", e);
+    }
   };
 
   // 1) initial pull (migrates any existing local data up), then continuous push
@@ -139,7 +166,7 @@ export function initCloudSync(): void {
   // 2) realtime: any cloud change → refresh local
   sb.channel("candidates-sync")
     .on("postgres_changes", { event: "*", schema: "public", table: "candidates" }, pullMerge)
-    .subscribe();
+    .subscribe((status) => log("realtime channel:", status));
 
   window.addEventListener("beforeunload", () => {
     window.clearInterval(iv);

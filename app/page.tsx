@@ -206,6 +206,9 @@ export default function ArcadePage() {
   const [resetErr, setResetErr] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
   const [loginErr, setLoginErr] = useState("");
+  // A remembered session shows a one-tap "Resume" on the landing page
+  // (instead of force-navigating there).
+  const [resumeInfo, setResumeInfo] = useState<{ email: string; name: string } | null>(null);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const ticketRef = useRef<HTMLCanvasElement | null>(null);
@@ -438,17 +441,24 @@ export default function ArcadePage() {
 
   const handleLogout = () => {
     clearSession();
+    setResumeInfo(null);
     goTo("floor");
   };
 
   const router = useRouter();
 
-  // Auto-restore session on mount / refresh
+  // Remember a prior session — but DON'T hijack the landing page. Pre-load the
+  // candidate's data and offer a one-tap "Resume" on the floor instead.
   useEffect(() => {
     try {
       const savedEmail = localStorage.getItem("tech_session");
       if (savedEmail && loadCandidateByEmail(savedEmail)) {
-        setPage("hq");
+        const raw = localStorage.getItem("tech_candidates_admin");
+        const list = raw ? JSON.parse(raw) : [];
+        const m = list.find(
+          (c: any) => c.email?.toLowerCase() === savedEmail.toLowerCase()
+        );
+        setResumeInfo({ email: savedEmail, name: m?.name || "PLAYER" });
       }
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1163,8 +1173,16 @@ export default function ArcadePage() {
               <span style={{ fontFamily: PS, fontSize: "11px", color: "#00f0ff", textShadow: "0 0 8px #00f0ff" }}>►</span>
             </div>
 
-            {/* candidate login */}
-            <div style={{ position: "absolute", top: "8.2%", left: "2.5%", zIndex: 7, textAlign: "left", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {/* candidate login / resume */}
+            <div style={{ position: "absolute", top: "8.2%", left: "2.5%", zIndex: 7, textAlign: "left", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              {resumeInfo && (
+                <button
+                  onClick={() => goTo("hq")}
+                  style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#04040a", border: "none", background: "radial-gradient(circle at 40% 30%, #b6f5ff, #00f0ff 60%, #0090b8)", borderRadius: "4px", padding: "6px 10px", boxShadow: "0 3px 0 #006074, 0 0 12px rgba(0,240,255,.5)" }}
+                >
+                  ▶ RESUME AS {resumeInfo.name.toUpperCase().slice(0, 14)}
+                </button>
+              )}
               <button
                 onClick={() => { setLoginEmail(form.email.trim() || loginEmail); setShowLoginModal(true); }}
                 style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#39ff14", border: "1.5px solid #39ff1466", background: "rgba(57,255,20,.1)", borderRadius: "4px", padding: "6px 10px", textShadow: "0 0 8px #39ff14" }}
