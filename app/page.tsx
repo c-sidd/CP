@@ -871,7 +871,7 @@ export default function ArcadePage() {
     const t = `I just joined ${club()} as a ${selLabel()}! Player #${String(playerNo || 1).padStart(4, "0")}. Insert coin & join the arcade!`;
     window.open("https://wa.me/?text=" + encodeURIComponent(t), "_blank");
   };
-  const onShareIG = () => window.open("https://instagram.com", "_blank");
+  const onShareIG = () => window.open("https://www.instagram.com/abes_technovation/", "_blank");
 
   // ---- computed reveal values (floor) ----
   const p = progress;
