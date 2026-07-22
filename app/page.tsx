@@ -154,7 +154,7 @@ export default function ArcadePage() {
   const [jx, setJx] = useState(0);
   const [jy, setJy] = useState(0);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-  const [score, setScore] = useState(1337);
+  const [registrationCount, setRegistrationCount] = useState(0);
   const [playerNo, setPlayerNo] = useState(0);
   const [hover, setHover] = useState("");
   const [error, setError] = useState("");
@@ -266,13 +266,29 @@ export default function ArcadePage() {
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    const scoreTimer = setInterval(() => {
-      setScore((s) => s + (Math.random() < 0.45 ? 1 : 0));
-    }, 3600);
     return () => {
       window.removeEventListener("mousemove", onMove);
       cancelAnimationFrame(raf);
-      clearInterval(scoreTimer);
+    };
+  }, []);
+
+  // Sync real candidate registration count
+  useEffect(() => {
+    const syncCount = () => {
+      try {
+        const raw = localStorage.getItem("tech_candidates_admin");
+        const list = raw ? JSON.parse(raw) : [];
+        setRegistrationCount(list.length);
+      } catch {
+        setRegistrationCount(0);
+      }
+    };
+    syncCount();
+    window.addEventListener("storage", syncCount);
+    const timer = setInterval(syncCount, 1500);
+    return () => {
+      window.removeEventListener("storage", syncCount);
+      clearInterval(timer);
     };
   }, []);
 
@@ -578,6 +594,10 @@ export default function ArcadePage() {
       setError("ENTER NAME & EMAIL TO PRESS START");
       return;
     }
+    if (!form.email.trim().toLowerCase().endsWith("@abes.ac.in")) {
+      setError("PLEASE USE YOUR COLLEGE EMAIL (@ABES.AC.IN)");
+      return;
+    }
     // Route through the Recruitment Quest briefing before domain selection.
     try {
       sessionStorage.setItem(
@@ -594,6 +614,10 @@ export default function ArcadePage() {
   const onSaveData = () => {
     if (!form.name.trim() || !form.email.trim() || !form.branch.trim() || !form.section.trim() || !form.phone.trim() || !form.college.trim()) {
       setError("!! ALL PLAYER FILE FIELDS ARE REQUIRED");
+      return;
+    }
+    if (!form.email.trim().toLowerCase().endsWith("@abes.ac.in")) {
+      setError("!! PLEASE USE YOUR OFFICIAL COLLEGE EMAIL (@ABES.AC.IN)");
       return;
     }
     if (selectedClasses.length < 2) {
@@ -642,7 +666,7 @@ export default function ArcadePage() {
         const merged = list.map((c: any) => (c.email.toLowerCase() === emailKey ? updatedCand : c));
         localStorage.setItem("tech_candidates_admin", JSON.stringify(merged));
         setPlayerNo(existing.playerNo || 1001);
-        setScore(1337 + merged.length);
+        setRegistrationCount(merged.length);
       } else {
         const newPlayerNo = 1000 + list.length + 1;
         const newCand = {
@@ -663,7 +687,7 @@ export default function ArcadePage() {
         list.unshift(newCand);
         localStorage.setItem("tech_candidates_admin", JSON.stringify(list));
         setPlayerNo(newPlayerNo);
-        setScore(1337 + list.length);
+        setRegistrationCount(list.length);
       }
     } catch {
       setPlayerNo(1001);
@@ -750,6 +774,10 @@ export default function ArcadePage() {
       setLoginErr("ENTER BOTH REGISTERED EMAIL & PIN");
       return;
     }
+    if (!loginEmail.trim().toLowerCase().endsWith("@abes.ac.in")) {
+      setLoginErr("PLEASE ENTER YOUR COLLEGE EMAIL (@ABES.AC.IN)");
+      return;
+    }
 
     try {
       const raw = localStorage.getItem("tech_candidates_admin");
@@ -788,6 +816,10 @@ export default function ArcadePage() {
     e.preventDefault();
     if (!resetEmail.trim() || !resetPhone.trim()) {
       setResetErr("ENTER BOTH EMAIL & PHONE TO VERIFY IDENTITY");
+      return;
+    }
+    if (!resetEmail.trim().toLowerCase().endsWith("@abes.ac.in")) {
+      setResetErr("PLEASE ENTER YOUR COLLEGE EMAIL (@ABES.AC.IN)");
       return;
     }
 
@@ -884,7 +916,7 @@ export default function ArcadePage() {
     amber: "rgba(255,180,40,.13)",
   };
   const tintColor = tintMap[SCREEN_TINT];
-  const scoreStr = String(score).padStart(6, "0");
+  const scoreStr = String(registrationCount).padStart(6, "0");
 
   // ---- shared style objects ----
   const fieldStyle: CSSProperties = {
@@ -1304,7 +1336,7 @@ export default function ArcadePage() {
                   <div style={{ fontFamily: PS, fontSize: "clamp(8px,1.1vw,14px)", color: "#ff2bd1", textShadow: "0 0 10px #ff2bd1", letterSpacing: "1px", textAlign: "center", lineHeight: 1.35 }}>QUICK HOOK · INSERT PLAYER DATA</div>
                   <div className="hook-form-inputs">
                     <input value={form.name} onChange={setField("name")} placeholder="PLAYER NAME" style={hookInput} />
-                    <input value={form.email} onChange={setField("email")} placeholder="EMAIL" style={hookInput} />
+                    <input value={form.email} onChange={setField("email")} placeholder="COLLEGE EMAIL (@ABES.AC.IN)" style={hookInput} />
                   </div>
                   <div style={{ ...errBase, fontSize: "8px", minHeight: "8px", textAlign: "center" }}>{error}</div>
                   <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "2px", flexWrap: "wrap", justifyContent: "center" }}>
@@ -1364,7 +1396,7 @@ export default function ArcadePage() {
           <div className="player-form-grid">
             {[
               { l: "PLAYER NAME", k: "name" as const, ph: "ENTER NAME" },
-              { l: "COLLEGE EMAIL", k: "email" as const, ph: "name@college.edu" },
+              { l: "COLLEGE EMAIL", k: "email" as const, ph: "student@abes.ac.in" },
               { l: "BRANCH", k: "branch" as const, ph: "E.G. COMPUTER SCIENCE" },
               { l: "SECTION", k: "section" as const, ph: "E.G. A / 2ND YEAR" },
               { l: "PHONE NUMBER", k: "phone" as const, ph: "+91 00000 00000" },
@@ -2032,12 +2064,12 @@ export default function ArcadePage() {
 
               <form onSubmit={handleCandidateLogin} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
                 <div>
-                  <div style={{ ...labelSm, color: "#39ff14" }}>REGISTERED EMAIL</div>
+                  <div style={{ ...labelSm, color: "#39ff14" }}>COLLEGE EMAIL (@ABES.AC.IN)</div>
                   <input
                     type="email"
                     value={loginEmail}
                     onChange={(e) => { setLoginEmail(e.target.value); setLoginErr(""); }}
-                    placeholder="name@college.edu"
+                    placeholder="student@abes.ac.in"
                     style={fieldStyle}
                   />
                 </div>
@@ -2099,12 +2131,12 @@ export default function ArcadePage() {
               ) : resetStep === "verify" ? (
                 <form onSubmit={handleForgotPinVerify} style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px", textAlign: "left" }}>
                   <div>
-                    <div style={{ ...labelSm, color: "#ffe600" }}>REGISTERED EMAIL</div>
+                    <div style={{ ...labelSm, color: "#ffe600" }}>COLLEGE EMAIL (@ABES.AC.IN)</div>
                     <input
                       type="email"
                       value={resetEmail}
                       onChange={(e) => { setResetEmail(e.target.value); setResetErr(""); }}
-                      placeholder="name@college.edu"
+                      placeholder="student@abes.ac.in"
                       style={fieldStyle}
                     />
                   </div>
