@@ -101,15 +101,52 @@ function writeLocal(list: Cand[]) {
   }
 }
 
-// Merge cloud rows with any local-only (not-yet-pushed) rows, cloud wins.
-function merge(cloud: Cand[], local: Cand[]): Cand[] {
-  const byEmail: Record<string, Cand> = {};
-  cloud.forEach((c) => { byEmail[String(c.email).toLowerCase()] = c; });
+// Emails we've confirmed exist(ed) in the cloud — lets us tell a brand-new
+// local registration (keep) apart from a row deleted in Supabase (drop).
+const PUSHED_KEY = "tech_pushed_emails";
+function readPushed(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(PUSHED_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+function writePushed(s: Set<string>) {
+  try {
+    localStorage.setItem(PUSHED_KEY, JSON.stringify(Array.from(s)));
+  } catch {
+    /* ignore */
+  }
+}
+function addPushed(emails: string[]) {
+  const s = readPushed();
+  emails.forEach((e) => e && s.add(e.toLowerCase()));
+  writePushed(s);
+}
+
+// Reconcile cloud + local so DELETES in Supabase propagate:
+//  • row in cloud                         → cloud wins
+//  • local-only + previously in cloud     → deleted upstream → drop it
+//  • local-only + never in cloud          → new registration → keep it
+function reconcile(cloud: Cand[], local: Cand[]): Cand[] {
+  const pushed = readPushed();
+  const cloudEmails = new Set(cloud.map((c) => String(c.email).toLowerCase()));
+  const result: Cand[] = [...cloud];
+  const nextPushed = new Set(pushed);
+  cloudEmails.forEach((e) => nextPushed.add(e));
+
   local.forEach((c) => {
     const k = String(c.email || "").toLowerCase();
-    if (k && !byEmail[k]) byEmail[k] = c;
+    if (!k || cloudEmails.has(k)) return;   // already represented by the cloud row
+    if (pushed.has(k)) {                     // was in cloud, now gone → deleted
+      nextPushed.delete(k);
+      return;
+    }
+    result.push(c);                          // never pushed → keep (new)
   });
-  return Object.values(byEmail);
+
+  writePushed(nextPushed);
+  return result;
 }
 
 let lastHash = "";
@@ -136,7 +173,7 @@ export function initCloudSync(): void {
         warn("read failed:", error.message || error);
         return;
       }
-      const merged = merge((data || []).map(candFromRow), readLocal());
+      const merged = reconcile((data || []).map(candFromRow), readLocal());
       const h = JSON.stringify(merged);
       if (h !== JSON.stringify(readLocal())) {
         lastHash = h; // set before write so our own storage event doesn't re-push
@@ -160,7 +197,10 @@ export function initCloudSync(): void {
       const rows = local.map(rowFromCand);
       const { error } = await sb.from("candidates").upsert(rows, { onConflict: "email" });
       if (error) warn("write failed:", error.message || error);
-      else log("pushed", rows.length, "rows to Supabase");
+      else {
+        addPushed(rows.map((r) => r.email));
+        log("pushed", rows.length, "rows to Supabase");
+      }
     } catch (e) {
       warn("write error:", e);
     }
