@@ -858,22 +858,42 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Submission Link (Safe URL checked against XSS) */}
-            {selectedCandidate.submissionLink && (
-              <div style={{ marginTop: "16px", padding: "12px", background: "rgba(57,255,20,.05)", border: "1.5px solid #39ff14", borderRadius: "8px" }}>
-                <div style={{ fontFamily: PS, fontSize: "8px", color: "#39ff14" }}>TASK SUBMISSION LINK:</div>
-                {sanitizeUrl(selectedCandidate.submissionLink) ? (
-                  <a
-                    href={sanitizeUrl(selectedCandidate.submissionLink)!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontFamily: VT, fontSize: "18px", color: "#ffe600", textDecoration: "underline", wordBreak: "break-all" }}
-                  >
-                    {selectedCandidate.submissionLink} ↗
-                  </a>
-                ) : (
-                  <span style={{ fontFamily: VT, fontSize: "16px", color: "#ff3b30" }}>[BLOCKED INVALID LINK]</span>
-                )}
+            {/* Task submission links — one field per enlisted domain */}
+            {selectedCandidate.domains && selectedCandidate.domains.length > 0 && (
+              <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ fontFamily: PS, fontSize: "9px", color: "#ffe600" }}>▮ TASK SUBMISSIONS</div>
+                {selectedCandidate.domains.map((key, i) => {
+                  const dm = DOMAINS.find((d) => d.key === key);
+                  const accent = dm?.color || "#39ff14";
+                  const link =
+                    (selectedCandidate.submissions && selectedCandidate.submissions[key]) ||
+                    (i === 0 ? selectedCandidate.submissionLink : "") ||
+                    "";
+                  const safe = sanitizeUrl(link);
+                  return (
+                    <div key={key} style={{ padding: "12px", background: `${accent}0d`, border: `1.5px solid ${accent}66`, borderRadius: "8px" }}>
+                      <div style={{ fontFamily: PS, fontSize: "8px", color: accent }}>
+                        {i === 0 ? "1ST" : "2ND"} · {dm ? dm.name : key} TASK
+                      </div>
+                      {link ? (
+                        safe ? (
+                          <a
+                            href={safe}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontFamily: VT, fontSize: "18px", color: "#ffe600", textDecoration: "underline", wordBreak: "break-all" }}
+                          >
+                            {link} ↗
+                          </a>
+                        ) : (
+                          <span style={{ fontFamily: VT, fontSize: "16px", color: "#ff3b30" }}>[BLOCKED INVALID LINK]</span>
+                        )
+                      ) : (
+                        <div style={{ fontFamily: VT, fontSize: "16px", color: "#4a5a7a" }}>— not submitted yet</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
