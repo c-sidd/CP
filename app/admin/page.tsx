@@ -280,32 +280,35 @@ export default function AdminPage() {
     );
   };
 
-  const exportCSV = () => {
-    // Build a readable per-department submission-links string for each candidate.
-    const submissionsFor = (c: Candidate) =>
-      (c.domains || [])
-        .map((k, i) => {
-          const name = DOMAINS.find((d) => d.key === k)?.name || k;
-          const link = (c.submissions && c.submissions[k]) || (i === 0 ? c.submissionLink : "") || "";
-          return `${name}: ${link || "—"}`;
-        })
-        .join(" | ");
+  // The two per-domain task submission links, in domain order [1st, 2nd].
+  const subLinksFor = (c: Candidate): [string, string] => {
+    const doms = c.domains || [];
+    const subs = c.submissions || {};
+    const l1 = subs[doms[0]] || c.submissionLink || "";
+    const l2 = subs[doms[1]] || "";
+    return [l1, l2];
+  };
 
-    const headers = ["PlayerNo", "Name", "Email", "Branch", "Phone", "Domains", "Stage", "TaskScore", "InterviewScore", "TotalScore", "SubmissionLinks", "Updated"];
-    const rows = candidates.map((c) => [
-      c.playerNo,
-      `"${c.name}"`,
-      `"${c.email}"`,
-      `"${c.branch}"`,
-      `"${c.phone}"`,
-      `"${c.domains.join(" + ")}"`,
-      `"${STAGES[c.stageIdx]?.label || "UNKNOWN"}"`,
-      c.taskScore != null ? c.taskScore : "",
-      c.interviewScore != null ? c.interviewScore : "",
-      c.taskScore != null && c.interviewScore != null ? c.taskScore + c.interviewScore : "",
-      `"${submissionsFor(c).replace(/"/g, "'")}"`,
-      `"${c.updatedAt}"`,
-    ]);
+  const exportCSV = () => {
+    const headers = ["PlayerNo", "Name", "Email", "Branch", "Phone", "Domains", "Stage", "TaskScore", "InterviewScore", "TotalScore", "SubLink1", "SubLink2", "Updated"];
+    const rows = candidates.map((c) => {
+      const [l1, l2] = subLinksFor(c);
+      return [
+        c.playerNo,
+        `"${c.name}"`,
+        `"${c.email}"`,
+        `"${c.branch}"`,
+        `"${c.phone}"`,
+        `"${c.domains.join(" + ")}"`,
+        `"${STAGES[c.stageIdx]?.label || "UNKNOWN"}"`,
+        c.taskScore != null ? c.taskScore : "",
+        c.interviewScore != null ? c.interviewScore : "",
+        c.taskScore != null && c.interviewScore != null ? c.taskScore + c.interviewScore : "",
+        `"${l1.replace(/"/g, "'")}"`,
+        `"${l2.replace(/"/g, "'")}"`,
+        `"${c.updatedAt}"`,
+      ];
+    });
     const content = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([content], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -321,25 +324,38 @@ export default function AdminPage() {
   const exportXLSX = () => {
     const esc = (v: unknown) =>
       String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const submissionsFor = (c: Candidate) =>
-      (c.domains || [])
-        .map((k, i) => {
-          const name = DOMAINS.find((d) => d.key === k)?.name || k;
-          const link = (c.submissions && c.submissions[k]) || (i === 0 ? c.submissionLink : "") || "";
-          return `${name}: ${link || "—"}`;
-        })
-        .join(" | ");
-    const cols = ["PlayerNo", "Name", "Email", "Branch", "Section", "Phone", "Domains", "Stage", "TaskScore", "InterviewScore", "TotalScore", "SubmissionLinks", "ReviewerNotes", "Updated"];
+    // Mirror the Supabase `candidates` table exactly (same column names & order).
+    const cols = [
+      "email", "app_id", "player_no", "name", "branch", "section", "phone",
+      "college_id", "domains", "answers", "stage_idx",
+      "sub_link_1", "sub_link_2", "task_score", "interview_score",
+      "rejected", "rejected_at_stage", "rejection_feedback", "notes", "updated_at",
+    ];
     const head = `<tr>${cols.map((c) => `<th style="background:#1c2540;color:#fff">${esc(c)}</th>`).join("")}</tr>`;
     const body = candidates
       .map((c) => {
-        const total = c.taskScore != null && c.interviewScore != null ? c.taskScore + c.interviewScore : "";
+        const [l1, l2] = subLinksFor(c);
         const vals = [
-          c.playerNo, c.name, c.email, c.branch, c.section, c.phone,
-          (c.domains || []).join(" + "),
-          STAGES[c.stageIdx]?.label || "UNKNOWN",
-          c.taskScore ?? "", c.interviewScore ?? "", total,
-          submissionsFor(c), c.notes || "", c.updatedAt,
+          c.email,
+          c.id ?? "",
+          c.playerNo ?? "",
+          c.name ?? "",
+          c.branch ?? "",
+          c.section ?? "",
+          c.phone ?? "",
+          c.collegeId ?? "",
+          `{${(c.domains || []).join(",")}}`,
+          JSON.stringify(c.answers || {}),
+          c.stageIdx ?? "",
+          l1,
+          l2,
+          c.taskScore ?? "",
+          c.interviewScore ?? "",
+          c.rejected ? "true" : "false",
+          c.rejectedAtStage ?? "",
+          c.rejectionFeedback ?? "",
+          c.notes ?? "",
+          c.updatedAt ?? "",
         ];
         return `<tr>${vals.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`;
       })
@@ -355,23 +371,17 @@ export default function AdminPage() {
   };
 
   // -------- Google Sheets live sync --------
-  const SHEET_HEADERS = ["PlayerNo", "Name", "Email", "Branch", "Section", "Phone", "Domains", "Stage", "TaskScore", "InterviewScore", "TotalScore", "SubmissionLinks", "ReviewerNotes", "Updated"];
+  const SHEET_HEADERS = ["PlayerNo", "Name", "Email", "Branch", "Section", "Phone", "Domains", "Stage", "TaskScore", "InterviewScore", "TotalScore", "SubLink1", "SubLink2", "ReviewerNotes", "Updated"];
   const rosterRows = () =>
     candidates.map((c) => {
       const total = c.taskScore != null && c.interviewScore != null ? c.taskScore + c.interviewScore : "";
-      const subs = (c.domains || [])
-        .map((k, i) => {
-          const name = DOMAINS.find((d) => d.key === k)?.name || k;
-          const link = (c.submissions && c.submissions[k]) || (i === 0 ? c.submissionLink : "") || "";
-          return `${name}: ${link || "—"}`;
-        })
-        .join(" | ");
+      const [l1, l2] = subLinksFor(c);
       const row = [
         c.playerNo, c.name, c.email, c.branch, c.section, c.phone,
         (c.domains || []).join(" + "),
         c.rejected ? "REJECTED / STOPPED" : STAGES[c.stageIdx]?.label || "UNKNOWN",
         c.taskScore ?? "", c.interviewScore ?? "", total,
-        subs, c.notes || "", c.updatedAt,
+        l1, l2, c.notes || "", c.updatedAt,
       ];
       return row.map((v) => (v == null ? "" : v));
     });
