@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import CloudSync from "./cloud-sync";
 
 export const metadata: Metadata = {
   title: "Club Recruitment Arcade — Insert Coin",
@@ -26,7 +27,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <CloudSync />
+        {children}
+      </body>
     </html>
   );
 }

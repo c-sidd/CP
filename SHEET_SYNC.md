@@ -23,19 +23,29 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({
+        ok: false,
+        error: "No POST data received. Do NOT click 'Run' on doPost inside Apps Script. Deploy as a Web App and trigger sync from the Admin Panel."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
     var data = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();      // requires a BOUND script (see step 1)
     var sheet = ss.getSheetByName('Candidates');
     if (!sheet) sheet = ss.insertSheet('Candidates');
     sheet.clearContents();
-    var rows = [data.headers].concat(data.rows || []);
-    sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+    var rows = [data.headers || []].concat(data.rows || []);
+    if (rows.length && rows[0] && rows[0].length) {
+      sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+    }
     SpreadsheetApp.flush();
     return ContentService
       .createTextOutput(JSON.stringify({ ok: true, count: (data.rows || []).length }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }));
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
   } finally {
     lock.releaseLock();
   }
@@ -64,21 +74,23 @@ That's it. From now on, every change auto-syncs (debounced ~1s). The dot on the
 SHEET SYNC button turns green (●) when sync is active, and the panel shows the
 last sync time.
 
-## Troubleshooting — "the sheet is empty"
+## Troubleshooting — "the sheet is empty" / Errors
 
-1. **Wrong tab.** Data goes to a **Candidates** tab, not `Sheet1`. Look at the
+1. **`TypeError: Cannot read properties of undefined (reading 'postData')` when clicking Run:**
+   Do **NOT** click the **▶ Run** button inside the Apps Script editor for `doPost`. The editor runs `doPost()` without sending request data (`e`), so `e` is undefined. The function is designed to run automatically when receiving POST requests from your application.
+2. **Wrong tab.** Data goes to a **Candidates** tab, not `Sheet1`. Look at the
    bottom tabs.
-2. **Standalone vs bound script.** The script MUST be created from **Extensions
+3. **Standalone vs bound script.** The script MUST be created from **Extensions
    → Apps Script inside this sheet**. If you made a separate project at
    script.google.com, `getActiveSpreadsheet()` is empty and nothing is written.
-3. **Test the endpoint.** Open the `/exec` URL in a browser tab. You should see
+4. **Test the endpoint.** Open the `/exec` URL in a browser tab. You should see
    *"Technovation sync endpoint is LIVE."* If you see an error or a login page,
    the deployment or access setting is wrong (must be **Anyone**).
-4. **Push manually.** In the admin, open **⚙ SHEET SYNC** and click **⟳ SYNC
+5. **Push manually.** In the admin, open **⚙ SHEET SYNC** and click **⟳ SYNC
    NOW**. Auto-sync only fires when data changes while the admin tab is open.
-5. **Re-deploy after edits.** Editing the script doesn't update the live URL —
+6. **Re-deploy after edits.** Editing the script doesn't update the live URL —
    do **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
-6. **Right URL saved.** It must end in `/exec` (not `/dev`), and you must have
+7. **Right URL saved.** It must end in `/exec` (not `/dev`), and you must have
    clicked **💾 SAVE** in the admin.
 
 ## Notes

@@ -1,30 +1,24 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
 /**
- * Supabase — STUBBED for now.
+ * Supabase client.
  *
- * The frontend currently runs fully client-side with no backend, so there are
- * no live database calls. When you're ready to wire persistence back in:
- *   1. npm install @supabase/supabase-js
- *   2. add NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local
- *   3. run supabase/schema.sql in your project
- *   4. replace the stub below with the real client:
+ * Reads its credentials from environment variables. If they aren't set, the
+ * app runs exactly as before (local-only) — `isSupabaseConfigured` stays false
+ * and the cloud-sync layer stays inert. Add the two vars to .env.local to turn
+ * on cross-device storage + real-time sync:
  *
- *      import { createClient } from "@supabase/supabase-js";
- *      export const supabase = createClient(
- *        process.env.NEXT_PUBLIC_SUPABASE_URL!,
- *        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
- *      );
+ *   NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+ *   NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
  */
 
-const ok = (data: unknown = null) =>
-  Promise.resolve({ data, error: null as null });
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = {
-  from() {
-    return {
-      insert: () => ok(null),
-      select: () => ok([]),
-      update: () => ok(null),
-    };
-  },
-  rpc: () => ok(null),
-};
+export const isSupabaseConfigured = Boolean(url && anonKey);
+
+export const supabase: SupabaseClient | null = isSupabaseConfigured
+  ? createClient(url as string, anonKey as string, {
+      auth: { persistSession: false },
+    })
+  : null;
