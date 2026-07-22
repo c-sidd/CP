@@ -59,8 +59,8 @@ lib/
   cloud-sync.ts       Two-way localStorage <-> Supabase mirror + realtime
   (note: types/avatar/context helpers are inlined inside page.tsx, not here)
 supabase/
-  schema.sql          RPC/bcrypt schema (NOT what the app uses today; future hardening)
-  schema_live.sql     ★ The table the app actually syncs to (run THIS one)
+  schema_live.sql     ★ The ONLY SQL file. Safe to run/re-run; creates + upgrades
+                        the `candidates` table the app syncs to.
 README.md             Project readme
 SHEET_SYNC.md         Google Sheets live-sync (Apps Script) setup guide
 .env.local.example    Supabase env var template
@@ -231,16 +231,16 @@ gains **cross-device storage + realtime**; otherwise it runs purely local.
     (`rowFromCand` / `candFromRow`). Logs everything to console as `[cloud-sync]`.
 - **`app/cloud-sync.tsx`** — a `"use client"` component mounted in `layout.tsx`
   that calls `initCloudSync()` once.
-- **`supabase/schema_live.sql`** — the table the sync layer targets: `candidates`
-  keyed by `email`, readable columns, Realtime enabled, **open RLS** (anon can
-  read/write). **Run this file** in Supabase SQL Editor.
+- **`supabase/schema_live.sql`** — the ONLY SQL file. Creates the `candidates`
+  table (keyed by `email`, `sub_link_1`/`sub_link_2` for the two task links,
+  Realtime enabled, **open RLS**). Idempotent: safe to run and re-run; it also
+  auto-upgrades an older table (adds the split submission columns, migrates old
+  `submissions`/`submission_link` data, drops them). **Run this file** in
+  Supabase SQL Editor whenever the schema changes.
   - ⚠ Security tradeoff: open RLS means the public key can read/write the table
     (needed for a keyless client-only app). Fine for an internal club tool but
     the data is not private from someone inspecting the site. Hardening path =
-    move to the RPC/bcrypt model in `supabase/schema.sql`.
-- **`supabase/schema.sql`** — an ALTERNATE, more secure RPC/bcrypt design
-  (set_passcode / candidate_login / submit_task_link, no anon reads). **The app
-  does NOT use this today.** Kept for future hardening.
+    move reads/writes behind SECURITY DEFINER RPCs + tighter policies.
 
 Live Supabase project in use: ref `eggcjyszoyhxllwqtgjy`. Keys live only in the
 user's `.env.local` (git-ignored) — never commit them.
