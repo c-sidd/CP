@@ -1413,7 +1413,7 @@ export default function ArcadePage() {
               { l: "PLAYER NAME", k: "name", ph: "ENTER NAME" },
               { l: "COLLEGE EMAIL", k: "email", ph: "student@abes.ac.in" },
               { l: "BRANCH", k: "branch", ph: "E.G. COMPUTER SCIENCE" },
-              { l: "SECTION", k: "section", ph: "E.G. A / 2ND YEAR" },
+              { l: "SECTION", k: "section", ph: "E.G. CSE-14" },
               { l: "PHONE NUMBER", k: "phone", ph: "10-DIGIT MOBILE", numeric: true, maxLen: 10 },
               { l: "ADMISSION NUMBER", k: "college", ph: "E.G. 24B0101010" },
             ] as { l: string; k: keyof typeof form; ph: string; numeric?: boolean; maxLen?: number }[]).map((f) => (
