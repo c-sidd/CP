@@ -118,14 +118,34 @@ function ArcadeButton({
 }
 
 // deterministic 8x8 mirrored pixel avatar
+// Neon palette — each user gets a unique two-tone scheme derived from their seed.
+const AVATAR_PALETTE = [
+  "#00f0ff", "#ff2bd1", "#ffe600", "#39ff14", "#ff7a2b",
+  "#b06bff", "#ff3b30", "#00ffa3", "#7de8ff", "#ff5edb", "#5b8cff", "#f0f0f0",
+];
+
+function avatarColors(seed: string): { primary: string; secondary: string } {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const h0 = h >>> 0;
+  const primary = AVATAR_PALETTE[h0 % AVATAR_PALETTE.length];
+  let secondary = AVATAR_PALETTE[Math.floor(h0 / AVATAR_PALETTE.length) % AVATAR_PALETTE.length];
+  if (secondary === primary) secondary = AVATAR_PALETTE[(h0 + 5) % AVATAR_PALETTE.length];
+  return { primary, secondary };
+}
+
 function drawAvatar(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   seed: string,
   cell: number,
-  color: string
+  _color?: string // ignored — colours are now derived per-user from the seed
 ) {
+  const { primary, secondary } = avatarColors(seed);
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i);
@@ -140,8 +160,10 @@ function drawAvatar(
     rows = 8;
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < 4; c++) {
-      if (rng() < 0.5) {
-        ctx.fillStyle = color;
+      const v = rng();
+      if (v < 0.5) {
+        // ~1 in 4 lit cells uses the accent colour for a two-tone look.
+        ctx.fillStyle = v < 0.12 ? secondary : primary;
         ctx.fillRect(x + c * cell, y + r * cell, cell, cell);
         ctx.fillRect(x + (cols - 1 - c) * cell, y + r * cell, cell, cell);
       }
@@ -224,7 +246,8 @@ export default function ArcadePage() {
       return d ? d.name + " / " + d.cls : "";
     }).filter(Boolean).join(" + ");
   };
-  const avatarSeed = () => (form.name || "PLAYER1") + (selectedClasses[0] || "x");
+  const avatarSeed = () =>
+    (form.name || "PLAYER1") + "|" + (form.email || "") + "|" + selectedClasses.join(",");
   const toggleClass = (key: string) => {
     setSelectedClasses((prev) => {
       if (prev.includes(key)) return prev.filter((k) => k !== key);
@@ -1391,9 +1414,29 @@ export default function ArcadePage() {
   };
 
   // ================= CREATE =================
-  const renderCreate = () => (
+  const renderCreate = () => {
+    // Once a candidate has fully submitted (activated account with a PIN), their
+    // application — including the 7 questionnaire answers — is locked read-only.
+    const answersLocked = (() => {
+      try {
+        const raw = localStorage.getItem("tech_candidates_admin");
+        const list = raw ? JSON.parse(raw) : [];
+        const m = list.find(
+          (c: any) => c.email?.toLowerCase() === (form.email || "").trim().toLowerCase()
+        );
+        return !!(m && m.pinHash);
+      } catch {
+        return false;
+      }
+    })();
+    return (
     <div style={{ height: "100vh", overflowY: "auto", overflowX: "hidden", background: "radial-gradient(140% 90% at 50% -10%, #141a30 0%, #0a0d1a 55%, #05060d 100%)", position: "relative" }}>
       <div style={scanOverlay(0.28)} />
+      {answersLocked && (
+        <div style={{ position: "sticky", top: 0, zIndex: 20, background: "rgba(255,230,0,.12)", borderBottom: "2px solid #ffe600", padding: "10px 16px", textAlign: "center", fontFamily: PS, fontSize: "clamp(8px,1.1vw,11px)", color: "#ffe600", textShadow: "0 0 8px #ffe600" }}>
+          🔒 APPLICATION SUBMITTED — YOUR ANSWERS ARE LOCKED &amp; CANNOT BE CHANGED
+        </div>
+      )}
       <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "clamp(24px,4vw,56px) clamp(16px,4vw,40px) 80px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
           <ArcadeButton onClick={() => goTo("floor")} style={{ cursor: "pointer", fontFamily: PS, fontSize: "9px", color: "#7de8ff", background: "transparent", border: "2px solid #1c3a4a", borderRadius: "5px", padding: "9px 12px" }} activeStyle={{ transform: "translateY(2px)" }}>◄ ARCADE FLOOR</ArcadeButton>
@@ -1421,6 +1464,7 @@ export default function ArcadePage() {
                 <div style={labelSm}>{f.l}</div>
                 <input
                   value={form[f.k]}
+                  readOnly={answersLocked}
                   onChange={
                     f.numeric
                       ? (e) => setForm((s) => ({ ...s, [f.k]: e.target.value.replace(/\D/g, "").slice(0, f.maxLen || 10) }))
@@ -1429,7 +1473,7 @@ export default function ArcadePage() {
                   placeholder={f.ph}
                   inputMode={f.numeric ? "numeric" : undefined}
                   maxLength={f.numeric ? f.maxLen : undefined}
-                  style={fieldStyle}
+                  style={{ ...fieldStyle, opacity: answersLocked ? 0.65 : 1, cursor: answersLocked ? "not-allowed" : "text" }}
                 />
               </div>
             ))}
@@ -1450,7 +1494,7 @@ export default function ArcadePage() {
               const labelColor = isPrimary ? "#00f0ff" : isSecondary ? "#ff2bd1" : d.color;
               const labelText = isPrimary ? "1ST" : isSecondary ? "2ND" : "";
               return (
-                <div key={d.key} style={badgeStyle(d)} onClick={() => toggleClass(d.key)}>
+                <div key={d.key} style={{ ...badgeStyle(d), opacity: answersLocked && idx < 0 ? 0.5 : 1, pointerEvents: answersLocked ? "none" : "auto" }} onClick={() => { if (!answersLocked) toggleClass(d.key); }}>
                   <div style={{ width: "clamp(44px,5vw,60px)", height: "clamp(44px,5vw,60px)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "8px", background: "rgba(255,255,255,.03)", border: "2px solid " + d.color, fontFamily: PS, fontSize: "clamp(18px,2.4vw,26px)", color: d.color, textShadow: "0 0 12px " + d.color }}>{d.glyph}</div>
                   <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: PS, fontSize: "clamp(8px,1vw,11px)", color: "#fff" }}>{d.name}</div>
@@ -1523,7 +1567,7 @@ export default function ArcadePage() {
                 <div style={{ fontFamily: VT, fontSize: "clamp(16px,1.9vw,22px)", color: "#ffe600", marginBottom: "10px", lineHeight: 1.35 }}>
                   "{q.q}"
                 </div>
-                <textarea value={form[q.k]} onChange={setField(q.k)} rows={3} placeholder="TYPE YOUR ANSWER..." style={areaStyle} />
+                <textarea value={form[q.k]} onChange={setField(q.k)} rows={3} readOnly={answersLocked} placeholder="TYPE YOUR ANSWER..." style={{ ...areaStyle, opacity: answersLocked ? 0.7 : 1, cursor: answersLocked ? "not-allowed" : "text" }} />
               </div>
             ))}
           </div>
@@ -1532,17 +1576,33 @@ export default function ArcadePage() {
         <div style={{ ...errBase, textAlign: "center", marginTop: "18px" }}>{error}</div>
 
         <div style={{ display: "flex", justifyContent: "center", marginTop: "clamp(24px,4vw,40px)" }}>
-          <ArcadeButton
-            onClick={onSaveData}
-            style={{ cursor: "pointer", fontFamily: PS, fontSize: "clamp(11px,1.5vw,16px)", color: "#053200", background: "radial-gradient(circle at 40% 30%, #eaffb0, #39ff14 55%, #0f8a00)", border: "none", borderRadius: "8px", padding: "clamp(16px,2.2vw,22px) clamp(28px,4vw,44px)", boxShadow: "0 10px 0 #0a5200, 0 0 34px rgba(57,255,20,.6), inset 0 3px 8px rgba(255,255,255,.6)", textShadow: "0 1px 0 rgba(255,255,255,.5)" }}
-            activeStyle={{ transform: "translateY(7px)", boxShadow: "0 3px 0 #0a5200, 0 0 18px rgba(57,255,20,.5), inset 0 3px 8px rgba(255,255,255,.6)" }}
-          >
-            ▶ SAVE PLAYER DATA
-          </ArcadeButton>
+          {answersLocked ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: VT, fontSize: "clamp(15px,1.8vw,20px)", color: "#ffe600", marginBottom: "12px" }}>
+                🔒 You&apos;ve already submitted. Your answers are final.
+              </div>
+              <ArcadeButton
+                onClick={() => goTo("hq")}
+                style={{ cursor: "pointer", fontFamily: PS, fontSize: "clamp(10px,1.3vw,14px)", color: "#04040a", background: "radial-gradient(circle at 40% 30%, #b6f5ff, #00f0ff 60%, #0090b8)", border: "none", borderRadius: "8px", padding: "14px 22px", boxShadow: "0 6px 0 #006074, 0 0 20px rgba(0,240,255,.5)" }}
+                activeStyle={{ transform: "translateY(4px)", boxShadow: "0 2px 0 #006074" }}
+              >
+                ▶ GO TO PLAYER HQ
+              </ArcadeButton>
+            </div>
+          ) : (
+            <ArcadeButton
+              onClick={onSaveData}
+              style={{ cursor: "pointer", fontFamily: PS, fontSize: "clamp(11px,1.5vw,16px)", color: "#053200", background: "radial-gradient(circle at 40% 30%, #eaffb0, #39ff14 55%, #0f8a00)", border: "none", borderRadius: "8px", padding: "clamp(16px,2.2vw,22px) clamp(28px,4vw,44px)", boxShadow: "0 10px 0 #0a5200, 0 0 34px rgba(57,255,20,.6), inset 0 3px 8px rgba(255,255,255,.6)", textShadow: "0 1px 0 rgba(255,255,255,.5)" }}
+              activeStyle={{ transform: "translateY(7px)", boxShadow: "0 3px 0 #0a5200, 0 0 18px rgba(57,255,20,.5), inset 0 3px 8px rgba(255,255,255,.6)" }}
+            >
+              ▶ SAVE PLAYER DATA
+            </ArcadeButton>
+          )}
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // ================= PASS =================
   const renderPass = () => (
